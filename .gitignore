@@ -1,0 +1,45 @@
+# Bytecode
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# CodeGraph index (local dev only)
+.codegraph/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Cell-mem runtime data
+cell_mem_data/
+*.db
+*.db-shm
+*.db-wal
