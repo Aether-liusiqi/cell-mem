@@ -39,10 +39,10 @@ classifiers = [
 requires-python = ">=3.11"
 
 [project.urls]
-Homepage = "https://github.com/Aether-liusiqi/cell-mem"
-Repository = "https://github.com/Aether-liusiqi/cell-mem.git"
-Issues = "https://github.com/Aether-liusiqi/cell-mem/issues"
-Changelog = "https://github.com/Aether-liusiqi/cell-mem/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/liusiqi/cell-mem"
+Repository = "https://github.com/liusiqi/cell-mem.git"
+Issues = "https://github.com/liusiqi/cell-mem/issues"
+Changelog = "https://github.com/liusiqi/cell-mem/blob/main/CHANGELOG.md"
 dependencies = [
     "mcp>=1.0.0",
     "sqlite-vec>=0.1.0",

@@ -14,7 +14,7 @@ this guide will help you get started.
 
 ```bash
 # Clone the repository
-git clone https://github.com/Aether-liusiqi/cell-mem.git
+git clone https://github.com/liusiqi/cell-mem.git
 cd cell-mem
 
 # Install with dev dependencies

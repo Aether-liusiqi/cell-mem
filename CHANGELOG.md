@@ -79,4 +79,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[0.1.0]: https://github.com/Aether-liusiqi/cell-mem/releases/tag/v0.1.0
+[0.1.0]: https://github.com/liusiqi/cell-mem/releases/tag/v0.1.0
