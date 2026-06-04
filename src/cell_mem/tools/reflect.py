@@ -1,4 +1,4 @@
-"""memory_reflect MCP tool — Phase 3: manual self-reflection trigger.
+"""memory_reflect MCP tool — manual self-reflection trigger.
 
 Triggers failure attribution analysis. Searches relevant episodic memories
 and uses LLM to identify root causes of failures.
@@ -20,8 +20,8 @@ def register_reflect_tool(mcp, memory_system: "MemorySystem") -> None:  # noqa: 
             "Dimension 2 (strategy): evaluate procedural template effectiveness. "
             "Dimension 3 (gaps): detect missing or retrievable knowledge. "
             "Dimension 4 (process): update templates, adjust weights, create meta-knowledge. "
-            "Use dimensions='failure' for simple attribution (Phase 3 behavior); "
-            "dimensions='all' for full 4-dimension reflection (Phase 4)."
+            "Use dimensions='failure' for simple attribution; "
+            "dimensions='all' for full 4-dimension reflection."
         ),
     )
     def memory_reflect(

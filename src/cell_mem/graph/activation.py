@@ -1,4 +1,4 @@
-"""BFS activation spreading on the memory association graph (Phase 2a).
+"""BFS activation spreading on the memory association graph.
 
 Implements the spreading activation algorithm from the design doc:
 1. Seed nodes start with activation = 1.0

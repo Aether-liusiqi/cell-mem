@@ -1,9 +1,9 @@
 """LLMClient abstraction and RateLimiter.
 
-Phase 3 introduces optional LLM dependency. All LLM calls go through
+Optional LLM dependency. All LLM calls go through
 this abstraction layer, with daily rate limiting and persistent state.
 When no LLM is configured, all LLM-dependent features degrade gracefully
-to their Phase 2 deterministic equivalents.
+to deterministic equivalents.
 """
 
 from __future__ import annotations

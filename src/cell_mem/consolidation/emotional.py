@@ -1,8 +1,8 @@
-"""Emotional valence scorers for consolidation (Phase 2b).
+"""Emotional valence scorers for consolidation.
 
 Abstract base class with degrade() chain, plus a rule-based implementation
 that scores text heuristically (exclamation marks, emoji, all-caps, negation).
-Phase 3 will add LLMScorer with automatic fallback.
+LLMScorer provides LLM-based scoring with automatic fallback.
 """
 
 from __future__ import annotations
@@ -133,12 +133,12 @@ class RuleBasedScorer(EmotionalScorer):
 
 
 # ---------------------------------------------------------------------------
-# Phase 3: LLM-based emotional scoring with automatic fallback chain
+# LLM-based emotional scoring with automatic fallback chain
 # ---------------------------------------------------------------------------
 
 
 class LLMScorer(EmotionalScorer):
-    """LLM-based emotional valence scorer (Phase 3).
+    """LLM-based emotional valence scorer.
 
     Sends text to an LLM with a structured prompt asking for valence
     and confidence. Returns (0.0, 0.0) on any failure — the FallbackScorer
@@ -188,7 +188,7 @@ class LLMScorer(EmotionalScorer):
 
 
 class FallbackScorer(EmotionalScorer):
-    """Chain of emotional scorers with degrade strategy (Phase 3).
+    """Chain of emotional scorers with degrade strategy.
 
     Tries scorers in order: primary → secondary → neutral default.
     Each scorer signals "can't handle this" by returning confidence < 0.3

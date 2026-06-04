@@ -1,9 +1,9 @@
-"""Pattern detection — Phase 2b: DBSCAN clustering on 2048d projection vectors.
+"""Pattern detection — DBSCAN clustering on 2048d projection vectors.
 
 Uses sklearn.cluster.DBSCAN with cosine metric to group similar episodic
 memories. Clusters of >= 3 episodes trigger automatic semantic entry creation.
 
-Phase 3: LLM-assisted pattern detection on top of DBSCAN pre-filtering.
+LLM-assisted pattern detection on top of DBSCAN pre-filtering.
 """
 
 from __future__ import annotations
@@ -79,10 +79,10 @@ class PatternDetector:
         Returns:
             List of PatternProposal for validated clusters.
         """
-        # Step 1: DBSCAN clustering (Phase 2b)
+        # Step 1: DBSCAN clustering
         proposals = self._dbscan_cluster(episodes)
 
-        # Step 2: LLM post-hoc review (Phase 3)
+        # Step 2: LLM post-hoc review
         if self._llm is not None and proposals:
             proposals = self._llm_review_clusters(proposals)
 

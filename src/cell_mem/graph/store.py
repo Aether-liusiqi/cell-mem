@@ -1,6 +1,6 @@
-"""Graph store abstraction and Phase 1 no-op stub.
+"""Graph store abstraction and no-op stub.
 
-Phase 2 replaces StubGraphStore with NetworkX (WAL-persisted) and
+Production graph store backed by NetworkX (WAL-persisted) and
 eventually Kuzu (embedded Cypher engine).
 """
 
@@ -45,10 +45,10 @@ class GraphStore(ABC):
 
 
 class StubGraphStore(GraphStore):
-    """Phase 1 no-op graph store. All operations are logged and return empty."""
+    """No-op graph store. All operations are logged and return empty."""
 
     def __init__(self):
-        logger.info("StubGraphStore ready (Phase 1 — no graph operations)")
+        logger.info("StubGraphStore ready (no graph operations)")
 
     def add_edge(
         self, source: str, target: str, weight: float, relation_type: str

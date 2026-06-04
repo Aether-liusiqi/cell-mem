@@ -16,7 +16,7 @@ def register_recall_tool(mcp, memory_system: "MemorySystem") -> None:  # noqa: F
         description=(
             "Retrieve relevant memories from the Cell-mem system. "
             "Searches across working, episodic, and semantic layers using "
-            "vector similarity. Phase 1 uses direct vector search; Phase 2 "
+            "vector similarity. Supports direct vector search and "
             "adds keyword search and association graph traversal. "
             "Set options.memory_type to 'episodic', 'semantic', or omit for both."
         ),

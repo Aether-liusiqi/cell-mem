@@ -52,7 +52,7 @@ class MemorySystem:
         vector_backend: str = "sqlite-vec",
         embedding_model_name: str = "all-MiniLM-L6-v2",
         embedding_device: str = "cpu",
-        # --- Phase 3: LLM configuration (all optional for backward compat) ---
+        # --- LLM configuration (all optional for backward compat) ---
         llm_client: Optional[Any] = None,  # Pre-constructed LLMClient (for testing)
         llm_backend: str = "openai",
         llm_api_key: str | None = None,
@@ -104,14 +104,14 @@ class MemorySystem:
             graph_store=None,  # Wired below after graph init
         )
 
-        # --- Phase 2a: real graph store ---
+        # --- Graph store ---
         self.graph = NetworkXGraphStore(self.store)
         self.search._graph = self.graph  # Enable two_pass strategy
 
-        # --- Phase 2b: real consolidation ---
+        # --- Consolidation ---
         from cell_mem.consolidation.emotional import RuleBasedScorer
 
-        # --- Phase 3: LLM client (auto-construct if api_key given) ---
+        # --- LLM client (auto-construct if api_key given) ---
         self.llm_client = llm_client
         if self.llm_client is None and llm_api_key is not None:
             from cell_mem.llm import OpenAIBackend, ClaudeBackend, RateLimiter
@@ -130,7 +130,7 @@ class MemorySystem:
             if self.llm_client:
                 logger.info("LLM client configured: backend=%s", llm_backend)
 
-        # --- Phase 3: Emotional scorer with LLM fallback chain ---
+        # --- Emotional scorer with LLM fallback chain ---
         if self.llm_client is not None:
             from cell_mem.consolidation.emotional import FallbackScorer, LLMScorer
 
@@ -147,7 +147,7 @@ class MemorySystem:
             embed_model=self.embed_model,
         )
 
-        # --- Phase 3: LLM-assisted pattern detection ---
+        # --- LLM-assisted pattern detection ---
         self.detector = PatternDetector(
             episodic=self.episodic,
             semantic=self.semantic,
@@ -162,22 +162,22 @@ class MemorySystem:
             store=self.store,
         )
 
-        # --- Phase 3: Procedural memory ---
+        # --- Procedural memory ---
         self.procedural = ProceduralMemory(self.store, self.embed_model)
 
-        # --- Phase 3: Reflection engine ---
+        # --- Reflection engine ---
         self.reflection = ReflectionEngine(
             episodic=self.episodic,
             llm_client=self.llm_client,
             embed_model=self.embed_model,
-            procedural=self.procedural,  # Phase 4: full 4-dim reflection
+            procedural=self.procedural,  # full 4-dim reflection
             semantic=self.semantic,
         )
 
-        # --- Phase 3: Condition evaluator ---
+        # --- Condition evaluator ---
         self.condition_eval = ConditionEvaluator(sqlite_store=self.store)
 
-        # --- Phase 4: Generative Replay Engine ---
+        # --- Generative Replay Engine ---
         enable_replay = True  # Always attempt; disabled if no LLM
         if enable_replay and self.llm_client is not None:
             from cell_mem.replay import CreativePool, GenerativeReplayEngine
@@ -527,7 +527,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Phase 3: Procedural memory API
+    # Procedural memory API
     # ------------------------------------------------------------------
 
     def save_procedural(
@@ -622,7 +622,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Phase 3: Reflection API
+    # Reflection API
     # ------------------------------------------------------------------
 
     def reflect(
@@ -634,7 +634,7 @@ class MemorySystem:
         Args:
             task_description: Description of the task.
             outcome: "failure" (default) or "success".
-            dimensions: "failure" (Phase 3 compat, dim 1 only),
+            dimensions: "failure" (dimension 1 only),
                         "all" (4 dimensions), or "strategy,gaps,process".
 
         Returns:
@@ -649,7 +649,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Phase 3: Falsifiable condition API
+    # Falsifiable condition API
     # ------------------------------------------------------------------
 
     def verify(self, entry_id: str, environment: dict | None = None) -> dict:
@@ -709,7 +709,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Phase 4: Generative Replay API
+    # Generative Replay API
     # ------------------------------------------------------------------
 
     def replay(self, theme_text: str | None = None) -> dict:

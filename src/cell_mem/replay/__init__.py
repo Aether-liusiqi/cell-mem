@@ -1,4 +1,4 @@
-"""Generative replay engine and creative pool — Phase 4."""
+"""Generative replay engine and creative pool."""
 
 from cell_mem.replay.engine import GenerativeReplayEngine
 from cell_mem.replay.creative_pool import CreativePool

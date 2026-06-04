@@ -1,4 +1,4 @@
-"""Phase 4 MCP tools: generative replay, creative pool feedback, environment check."""
+"""MCP tools for generative replay, creative pool feedback, and environment check."""
 
 from __future__ import annotations
 

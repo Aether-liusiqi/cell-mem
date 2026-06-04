@@ -1,4 +1,4 @@
-"""Cell-mem LLM abstraction layer — Phase 3.
+"""Cell-mem LLM abstraction layer.
 
 Provides:
 - LLMClient ABC: abstract interface for LLM backends

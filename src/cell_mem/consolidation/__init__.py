@@ -1,4 +1,4 @@
-"""Consolidation processor — Phase 2b: scoring + pattern detection + scheduling."""
+"""Consolidation processor — scoring, pattern detection, and scheduling."""
 
 from cell_mem.consolidation.emotional import EmotionalScorer, RuleBasedScorer
 from cell_mem.consolidation.scorer import ConsolidationScorer

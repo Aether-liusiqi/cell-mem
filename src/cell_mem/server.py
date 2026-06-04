@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def register_all_tools(mcp, memory_system: MemorySystem) -> None:
-    """Register all MCP tools (Phase 1 + Phase 2a + Phase 2b)."""
+    """Register all MCP tools."""
     from cell_mem.tools.save import register_save_tool
     from cell_mem.tools.recall import register_recall_tool
     from cell_mem.tools.status import register_status_tool
@@ -111,9 +111,9 @@ def register_all_tools(mcp, memory_system: MemorySystem) -> None:
     register_recall_tool(mcp, memory_system)
     register_status_tool(mcp, memory_system)
     register_associate_tool(mcp, memory_system)
-    register_phase2b_tools(mcp, memory_system)  # memory_forget + memory_consolidate
-    register_phase3_tools(mcp, memory_system)   # memory_verify + memory_reflect
-    register_phase4_tools(mcp, memory_system)   # memory_replay + creative pool + environment
+    register_phase2b_tools(mcp, memory_system)
+    register_phase3_tools(mcp, memory_system)
+    register_phase4_tools(mcp, memory_system)
 
     logger.info("MCP tools: memory_save, memory_recall, memory_status, "
                 "memory_associate, memory_forget, memory_consolidate, "
@@ -169,7 +169,7 @@ def main() -> None:
             "with consolidation processor, LLM emotional scoring, "
             "falsifiable conditions, self-reflection, generative replay, "
             "and creative pool management. "
-            "Phase 4 provides 12 MCP tools: save, recall, status, associate, "
+            "Cell-mem provides 12 MCP tools: save, recall, status, associate, "
             "forget, consolidate, verify, reflect, replay, hypothesis_feedback, "
             "creative_pool, check_environment."
         ),

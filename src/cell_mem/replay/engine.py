@@ -1,4 +1,4 @@
-"""Generative Replay Engine — Phase 4: five-phase creative hypothesis generation.
+"""Generative Replay Engine — five-phase creative hypothesis generation.
 
 Biological correspondence: hippocampal non-literal replay + DMN free exploration.
 
@@ -104,7 +104,7 @@ class GenerativeReplayEngine:
         try:
             self._total_cycles += 1
 
-            # Phase 1: Biased sampling
+            # Step 1: Biased sampling
             theme_emb = None
             if theme_text:
                 theme_emb = self._embed.embed_query(theme_text)
@@ -116,7 +116,7 @@ class GenerativeReplayEngine:
                     "data": {"hypotheses_generated": 0, "note": "Insufficient seeds", "cycle": self._total_cycles},
                 }
 
-            # Phase 2: Random walks
+            # Step 2: Random walks
             concept_sets: Dict[str, Set[str]] = {}
             for sid in seed_ids:
                 cs = self._random_walk(sid)
@@ -130,10 +130,10 @@ class GenerativeReplayEngine:
                     "data": {"hypotheses_generated": 0, "note": "Insufficient concept sets", "cycle": self._total_cycles},
                 }
 
-            # Phase 3: Cross-domain pairing → generate hypotheses
+            # Step 3: Cross-domain pairing → generate hypotheses
             raw_hypotheses = self._cross_domain_pair(concept_sets)
 
-            # Phase 4: Noise filter
+            # Step 4: Noise filter
             filtered = []
             for h in raw_hypotheses:
                 result = self._noise_filter(h)
@@ -170,7 +170,7 @@ class GenerativeReplayEngine:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Phase 1: Biased Sampling
+    # Step 1: Biased Sampling
     # ------------------------------------------------------------------
 
     def _sample_seeds(self, theme_embedding: np.ndarray | None = None) -> List[str]:
@@ -254,7 +254,7 @@ class GenerativeReplayEngine:
         return sampled_ids
 
     # ------------------------------------------------------------------
-    # Phase 2: Weak-edge Random Walk
+    # Step 2: Weak-edge Random Walk
     # ------------------------------------------------------------------
 
     def _random_walk(self, seed_id: str) -> Set[str]:
@@ -301,7 +301,7 @@ class GenerativeReplayEngine:
         return concept_set
 
     # ------------------------------------------------------------------
-    # Phase 3: Cross-domain Pairing
+    # Step 3: Cross-domain Pairing
     # ------------------------------------------------------------------
 
     def _cross_domain_pair(
@@ -374,7 +374,7 @@ class GenerativeReplayEngine:
         return hypotheses
 
     # ------------------------------------------------------------------
-    # Phase 4: Noise Filter
+    # Step 4: Noise Filter
     # ------------------------------------------------------------------
 
     def _noise_filter(self, hypothesis: dict) -> dict | None:

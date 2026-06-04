@@ -1,4 +1,4 @@
-"""NetworkX-based graph store backed by SQLite persistence (Phase 2a).
+"""NetworkX-based graph store backed by SQLite persistence.
 
 Replaces StubGraphStore with a real DiGraph, loading from graph_nodes
 and graph_edges tables on init and writing through to SQLite on mutation.

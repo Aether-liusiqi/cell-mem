@@ -1,7 +1,7 @@
-"""Self-reflection engine — Phase 3: failure attribution (归因分析).
+"""Self-reflection engine — failure attribution (归因分析).
 
-Phase 3 focuses on failure attribution only (why did a task fail?).
-Phase 4 will add strategy evaluation, knowledge gap detection, and
+Focused on failure attribution (why did a task fail?).
+Also supports strategy evaluation, knowledge gap detection, and
 meta-knowledge creation (the full 4-dimension reflection loop).
 
 The engine searches relevant episodic memories, sends them to an LLM
@@ -68,7 +68,7 @@ class ReflectionEngine:
 
         Args:
             task_description: Description of the task that was attempted.
-            outcome: "failure" (default) or "success". Phase 3 focuses on failure.
+            outcome: "failure" (default) or "success".
 
         Returns:
             {"status": "ok", "data": {"reflection_id": "...", "analysis": {...}}}
@@ -168,7 +168,7 @@ class ReflectionEngine:
         return reflections[:limit]
 
     # ------------------------------------------------------------------
-    # Dimension 2: Strategy Effectiveness (Phase 4)
+    # Dimension 2: Strategy Effectiveness
     # ------------------------------------------------------------------
 
     def evaluate_strategy(self) -> dict:
@@ -252,7 +252,7 @@ class ReflectionEngine:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Dimension 3: Knowledge Gap Detection (Phase 4)
+    # Dimension 3: Knowledge Gap Detection
     # ------------------------------------------------------------------
 
     def detect_knowledge_gaps(self, failure_context: str) -> dict:
@@ -304,7 +304,7 @@ class ReflectionEngine:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Dimension 4: Result Processing (Phase 4)
+    # Dimension 4: Result Processing
     # ------------------------------------------------------------------
 
     def process_results(self, analysis: dict) -> dict:
@@ -367,7 +367,7 @@ class ReflectionEngine:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Full 4-Dimension Reflection (Phase 4 orchestrator)
+    # Full 4-Dimension Reflection orchestrator
     # ------------------------------------------------------------------
 
     def full_reflection(
@@ -381,7 +381,7 @@ class ReflectionEngine:
         """
         dimensions = {}
 
-        # Dimension 1: Effect Attribution (Phase 3)
+        # Dimension 1: Effect Attribution
         dim1 = self.reflect_on_failure(task_description, outcome)
         dimensions["effect_attribution"] = dim1
 

@@ -1,6 +1,6 @@
 """Procedural memory layer — basal-ganglia-like skill/strategy storage.
 
-Phase 3 introduces procedural memory with two key differentiators from
+Procedural memory with two key differentiators from
 existing solutions (LangMem, AgentMemory):
 
 1. Condition-triggered: Templates are activated by cosine similarity
@@ -275,7 +275,7 @@ class ProceduralMemory:
         matches.sort(key=lambda x: x[1], reverse=True)
         top_matches = matches[:top_k]
 
-        # Phase 4: Explore/Exploit epsilon-greedy
+        # Explore/Exploit epsilon-greedy
         if len(top_matches) > 1 and explore_ratio > 0:
             import random
             if random.random() < explore_ratio:

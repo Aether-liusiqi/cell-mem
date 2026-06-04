@@ -1,11 +1,11 @@
-"""Consolidation scoring — five-dimension model (Phase 2b).
+"""Consolidation scoring — five-dimension model.
 
 S_total = 1.5*S_emotional + 1.2*S_outcome + 1.0*S_repetition
         + 0.8*S_novelty + 1.0*S_recency
 
-Phase 2b: deterministic scoring with default placeholders for
+Deterministic scoring with default placeholders for
           S_emotional and S_outcome.
-Phase 3:  LLM-computed S_emotional and S_outcome replace defaults.
+LLM-computed S_emotional and S_outcome replace defaults.
 """
 
 from __future__ import annotations

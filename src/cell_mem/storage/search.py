@@ -1,7 +1,7 @@
 """Search engine coordinating vector search across memory layers.
 
-Phase 1: vector-only (direct strategy).
-Phase 2a: FTS5 keyword + RRF fusion + association graph BFS (two_pass).
+Originally: vector-only (direct strategy).
+FTS5 keyword + RRF fusion + association graph BFS (two_pass).
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ RRF_K = 60
 class SearchEngine:
     """Coordinates search across episodic and semantic memory layers.
 
-    Phase 2a strategies:
-    - "direct": vector similarity only (Phase 1)
+    Search strategies:
+    - "direct": vector similarity only
     - "rrf_fusion": vector + FTS5 keyword fused via RRF
     - "two_pass": RRF fusion + BFS activation spreading on graph
     """
@@ -108,7 +108,7 @@ class SearchEngine:
             )
             strategy = "direct"
 
-        # --- Direct strategy (Phase 1 fallback) ---
+        # --- Direct strategy ---
         results: List[MemoryObject] = []
 
         if memory_type in (None, "episodic"):
@@ -127,7 +127,7 @@ class SearchEngine:
         return results[:top_k]
 
     # ------------------------------------------------------------------
-    # Phase 2a strategies
+    # Advanced strategies
     # ------------------------------------------------------------------
 
     def _rrf_fusion(

@@ -159,7 +159,7 @@ class EpisodicMemory:
         return results
 
     def recall_by_keyword(self, query: str, limit: int = 10) -> List[MemoryObject]:
-        """FTS5 keyword search. Phase 1: simple MATCH query."""
+        """FTS5 keyword search."""
         results = []
         try:
             ids = self._store.fetchall(
@@ -177,7 +177,7 @@ class EpisodicMemory:
     def recall_combined(
         self, query: str, query_embedding: np.ndarray, top_k: int = 10
     ) -> List[MemoryObject]:
-        """Phase 1: vector-only. Phase 2: vector + FTS5 + RRF fusion."""
+        """Vector + FTS5 + RRF fusion search."""
         return self.recall_by_vector(query_embedding, top_k)
 
     # ------------------------------------------------------------------
@@ -214,7 +214,7 @@ class EpisodicMemory:
         }
 
     # ------------------------------------------------------------------
-    # Phase 2b: update, batch load, similarity search
+    # Update, batch load, similarity search
     # ------------------------------------------------------------------
 
     def update(

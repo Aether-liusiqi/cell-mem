@@ -1,4 +1,4 @@
-"""Consolidation scheduler — Phase 2b: periodic consolidation cycles.
+"""Consolidation scheduler — periodic consolidation cycles.
 
 Orchestrates the full consolidation cycle:
 1. Score all episodes via ConsolidationScorer

@@ -2,7 +2,7 @@
 
 This module is the foundation of Cell-mem's persistence layer. All memory layers
 write through this single store. WAL mode enables concurrent read/write without
-locking — critical for Phase 2's background consolidation processor.
+locking — critical for the background consolidation processor.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ CREATE TRIGGER IF NOT EXISTS semantic_au AFTER UPDATE ON semantic_memory BEGIN
 END;
 
 -- ============================================================
--- Graph: association edges between memory nodes (Phase 2a)
+-- Graph: association edges between memory nodes
 -- ============================================================
 CREATE TABLE IF NOT EXISTS graph_nodes (
     id         TEXT PRIMARY KEY,
@@ -146,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_id);
 
 -- ============================================================
--- Cold Storage: archived/forgotten episodic memories (Phase 2b)
+-- Cold Storage: archived/forgotten episodic memories
 -- ============================================================
 CREATE TABLE IF NOT EXISTS cold_storage (
     id              TEXT PRIMARY KEY,
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS cold_storage (
 );
 
 -- ============================================================
--- Procedural Memory: task templates / skills (Phase 3)
+-- Procedural Memory: task templates / skills
 -- ============================================================
 CREATE TABLE IF NOT EXISTS procedural_memory (
     id                  TEXT PRIMARY KEY,
@@ -205,7 +205,7 @@ CREATE TRIGGER IF NOT EXISTS procedural_au AFTER UPDATE ON procedural_memory BEG
 END;
 
 -- ============================================================
--- Creative Pool: generative replay hypotheses (Phase 4)
+-- Creative Pool: generative replay hypotheses
 -- ============================================================
 CREATE TABLE IF NOT EXISTS creative_pool (
     id               TEXT PRIMARY KEY,
@@ -226,7 +226,7 @@ CREATE TABLE IF NOT EXISTS creative_pool (
 );
 
 -- ============================================================
--- Environment Snapshots: auto-falsifiable tracking (Phase 4)
+-- Environment Snapshots: auto-falsifiable tracking
 -- ============================================================
 CREATE TABLE IF NOT EXISTS environment_snapshots (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,

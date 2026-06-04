@@ -1,4 +1,4 @@
-"""memory_verify MCP tool — Phase 3: manual falsifiable condition verification.
+"""memory_verify MCP tool — manual falsifiable condition verification.
 
 Checks semantic knowledge entries against current environment values.
 If a falsifiable condition is met, the entry is marked as expired.

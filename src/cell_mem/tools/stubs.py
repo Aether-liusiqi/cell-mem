@@ -1,7 +1,5 @@
-"""Phase 2 MCP tool registrations.
+"""MCP tool registrations for associate, forget, and consolidate.
 
-Phase 2a: memory_associate is live.
-Phase 2b: memory_forget and memory_consolidate are live.
 All three are registered separately by their respective helper functions.
 """
 
@@ -14,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 def register_phase2b_tools(mcp, memory_system: "MemorySystem") -> None:  # noqa: F821
-    """Register memory_forget and memory_consolidate tools (Phase 2b live)."""
+    """Register memory_forget and memory_consolidate tools."""
 
     @mcp.tool(
         name="memory_forget",
@@ -45,7 +43,7 @@ def register_phase2b_tools(mcp, memory_system: "MemorySystem") -> None:  # noqa:
 
 
 def register_phase3_tools(mcp, memory_system: "MemorySystem") -> None:  # noqa: F821
-    """Register memory_verify and memory_reflect tools (Phase 3)."""
+    """Register memory_verify and memory_reflect tools."""
     from cell_mem.tools.verify import register_verify_tool
     from cell_mem.tools.reflect import register_reflect_tool
 
@@ -53,11 +51,11 @@ def register_phase3_tools(mcp, memory_system: "MemorySystem") -> None:  # noqa: 
     register_reflect_tool(mcp, memory_system)
 
     import logging
-    logging.getLogger(__name__).info("Phase 3 MCP tools: memory_verify, memory_reflect")
+    logging.getLogger(__name__).info("MCP tools: memory_verify, memory_reflect")
 
 
 def register_phase4_tools(mcp, memory_system: "MemorySystem") -> None:  # noqa: F821
-    """Register Phase 4 tools: memory_replay, creative pool, environment check."""
+    """Register tools: memory_replay, creative pool, environment check."""
     from cell_mem.tools.replay import register_replay_tool, register_creative_pool_tools
 
     register_replay_tool(mcp, memory_system)
@@ -65,13 +63,13 @@ def register_phase4_tools(mcp, memory_system: "MemorySystem") -> None:  # noqa: 
 
     import logging
     logging.getLogger(__name__).info(
-        "Phase 4 MCP tools: memory_replay, memory_hypothesis_feedback, "
+        "MCP tools: memory_replay, memory_hypothesis_feedback, "
         "memory_creative_pool, memory_check_environment"
     )
 
 
 def register_associate_tool(mcp, memory_system: "MemorySystem") -> None:  # noqa: F821
-    """Register the real memory_associate tool (Phase 2a)."""
+    """Register the memory_associate tool."""
 
     @mcp.tool(
         name="memory_associate",

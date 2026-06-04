@@ -1,4 +1,4 @@
-"""Falsifiable condition evaluator — Phase 3: manual memory_verify trigger.
+"""Falsifiable condition evaluator — manual memory_verify trigger.
 
 Evaluates structured falsifiable conditions stored in semantic memory entries.
 Each condition is a dict describing when the knowledge becomes invalid:
@@ -92,7 +92,7 @@ def _compare_versions(actual: Any, expected: Any, operator: str) -> bool:
 class ConditionEvaluator:
     """Evaluates falsifiable conditions stored in semantic memory.
 
-    Phase 4: supports environment snapshot capture and auto-verification
+    Supports environment snapshot capture and auto-verification
     on environment changes.
 
     Usage:
@@ -268,7 +268,7 @@ class ConditionEvaluator:
         }
 
     # ------------------------------------------------------------------
-    # Phase 4: Environment Snapshots + Auto-Verify
+    # Environment Snapshots + Auto-Verify
     # ------------------------------------------------------------------
 
     def capture_snapshot(self, environment: dict) -> int:

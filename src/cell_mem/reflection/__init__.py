@@ -1,4 +1,4 @@
-"""Self-reflection engine — Phase 3."""
+"""Self-reflection engine."""
 
 from cell_mem.reflection.engine import ReflectionEngine
 

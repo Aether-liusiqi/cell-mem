@@ -1,4 +1,4 @@
-"""Falsifiable condition evaluator — Phase 3."""
+"""Falsifiable condition evaluator."""
 
 from cell_mem.conditions.evaluator import ConditionEvaluator
 
