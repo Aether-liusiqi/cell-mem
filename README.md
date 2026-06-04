@@ -329,6 +329,16 @@ src/cell_mem/
 
 ---
 
+## Known Limitations
+
+- **Embedding model first load.** First startup downloads `all-MiniLM-L6-v2` (~90 MB) and takes ~30 seconds. Use `--preload` flag to warm up at startup.
+- **sqlite-vec requires Rust toolchain** for compilation from source. On most platforms, pre-built wheels are available via pip. If building from source, install Rust from [rustup.rs](https://rustup.rs).
+- **API key via CLI is visible in process lists** on multi-user systems. Prefer environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) for production deployments.
+- **No MCP tool rate limiting.** LLM calls are rate-limited (default 100/day), but MCP tools themselves have no per-call throttle. In local agent deployments this is not a practical concern.
+- **Preference pipeline needs LLM for optimal extraction.** Keyword-based fallback works without LLM, but extraction quality improves significantly with an LLM configured.
+
+---
+
 ## Requirements
 
 - Python ≥ 3.11
