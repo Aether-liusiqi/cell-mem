@@ -9,7 +9,7 @@ operating at different timescales, governed by neuro-inspired consolidation and 
 processes. It ships as an MCP server — drop it into Claude Code, Codex CLI, or any
 MCP-compatible agent host.
 
-> **Status:** Phase 4 (feature-complete) — see [CHANGELOG.md](CHANGELOG.md) for version history.
+> **Status:** Stable — see [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
@@ -44,13 +44,13 @@ MCP Server (stdio + HTTP transport)
 │   ├── Forgetting (low-score → cold storage archive, rescuer support)
 │   └── State persistence across restarts
 │
-├── Reflective System (Phase 3–4)
+├── Reflective System
 │   ├── Effect attribution — "What went wrong and why?"
 │   ├── Strategy evaluation — Success trends, better variants, redundancy
 │   ├── Knowledge gap detection — Missing info? Retrieval failure?
 │   └── Result processing — Update procedural weights, adjust semantic confidence
 │
-├── Generative Replay Engine (Phase 4)
+├── Generative Replay Engine
 │   ├── 5-stage algorithm: biased sampling → random walk → cross-domain pairing
 │   │                      → 4-layer noise filter → creative pool management
 │   ├── Creative pool: hypothesis lifecycle (pending → confirmed/rejected → promoted)
@@ -158,21 +158,21 @@ Add to your agent's MCP configuration:
 
 ## Key Mechanisms
 
-### Consolidation (Phase 2)
+### Consolidation
 Automatic (via `should_run()`) or manual (`memory_consolidate`) cycles:
 1. Score all episodes on recency, frequency, emotional valence, surprise
 2. Identify low-score candidates for forgetting
 3. After 3 consecutive low-score cycles → archive to cold storage (rescuable)
 4. Run DBSCAN pattern clustering to detect emerging knowledge patterns
 
-### Self-Reflection (Phases 3–4)
+### Self-Reflection
 Four-dimensional meta-reasoning over failure events:
 - **Dimension 1 — Effect Attribution**: Causal analysis of failures
 - **Dimension 2 — Strategy Evaluation**: Success rate trends, variant comparison
 - **Dimension 3 — Knowledge Gap Detection**: Missing facts or retrieval failures
 - **Dimension 4 — Result Processing**: Update procedural weights, adjust confidences, create meta-knowledge
 
-### Generative Replay (Phase 4)
+### Generative Replay
 Five-stage creative hypothesis engine inspired by hippocampal replay:
 1. **Biased sampling** — pick K=3 seeds proportional to recency × emotional salience × novelty
 2. **Random walk** — L=3 steps per seed, 80/20 strong/weak edge sampling
@@ -180,7 +180,7 @@ Five-stage creative hypothesis engine inspired by hippocampal replay:
 4. **4-layer noise filter** — contradiction check, triviality filter, dual-source verification, stability requirement
 5. **Creative pool management** — 10 noise constraints, pending → confirmed → promoted lifecycle
 
-### Falsifiable Conditions (Phase 3)
+### Falsifiable Conditions
 Each semantic fact can carry a `falsifiable_condition`:
 ```json
 {
@@ -235,7 +235,7 @@ ms.shutdown()
 
 ### LLM Backend Configuration
 
-Phase 3–4 features (reflection, replay, emotional scoring) can optionally use an LLM:
+LLM-powered features (reflection, replay, emotional scoring) can optionally use an LLM:
 
 ```python
 ms = MemorySystem(
@@ -286,13 +286,13 @@ src/cell_mem/
 │   ├── emotional.py         # Emotional valence evaluation
 │   └── scheduler.py         # Cycle orchestrator + forgetting
 │
-├── reflection/              # Meta-reasoning (Phase 3–4)
+├── reflection/              # Meta-reasoning
 │   └── engine.py            # 4-dimension reflection engine
 │
-├── conditions/              # Falsifiable conditions (Phase 3)
+├── conditions/              # Falsifiable conditions
 │   └── evaluator.py         # Condition checking + environment snapshots
 │
-├── replay/                  # Generative replay (Phase 4)
+├── replay/                  # Generative replay
 │   ├── engine.py            # 5-stage replay algorithm
 │   └── creative_pool.py     # Hypothesis lifecycle management
 │
@@ -307,7 +307,7 @@ src/cell_mem/
     ├── verify.py            # memory_verify
     ├── reflect.py           # memory_reflect
     ├── replay.py            # memory_replay + creative pool tools
-    └── stubs.py             # memory_associate, forget, consolidate, phase wiring
+    └── stubs.py             # memory_associate, forget, consolidate, tool wiring
 ```
 
 ---
