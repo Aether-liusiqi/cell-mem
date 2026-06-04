@@ -1,0 +1,36 @@
+{
+  "seed_knowledge": [
+    {
+      "content": "该项目使用 React 18 + TypeScript 5.x 作为前端技术栈",
+      "confidence": 0.9,
+      "falsifiable_condition": {
+        "field": "package.json",
+        "operator": "version_changed",
+        "value": "react"
+      },
+      "source": "manual"
+    },
+    {
+      "content": "用户（刘思奇）偏好 VSCode 编辑器，主要开发语言是 TypeScript 和 Python",
+      "confidence": 0.95,
+      "falsifiable_condition": null,
+      "source": "manual"
+    },
+    {
+      "content": "Cell-mem 项目使用 MCP Server 形态提供记忆服务，替换 Codex CLI 的内置 memory 系统",
+      "confidence": 0.95,
+      "falsifiable_condition": null,
+      "source": "manual"
+    },
+    {
+      "content": "该项目的后端 API 使用 FastAPI 框架，数据库使用 PostgreSQL",
+      "confidence": 0.6,
+      "falsifiable_condition": {
+        "field": "codebase_search",
+        "operator": "not_found",
+        "value": "FastAPI"
+      },
+      "source": "manual"
+    }
+  ]
+}
