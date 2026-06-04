@@ -106,20 +106,25 @@ def register_all_tools(mcp, memory_system: MemorySystem) -> None:
     from cell_mem.tools.recall import register_recall_tool
     from cell_mem.tools.status import register_status_tool
     from cell_mem.tools.stubs import register_associate_tool, register_phase2b_tools, register_phase3_tools, register_phase4_tools
+    from cell_mem.tools.preference import register_preference_tools
 
     register_save_tool(mcp, memory_system)
     register_recall_tool(mcp, memory_system)
     register_status_tool(mcp, memory_system)
     register_associate_tool(mcp, memory_system)
-    register_phase2b_tools(mcp, memory_system)
-    register_phase3_tools(mcp, memory_system)
-    register_phase4_tools(mcp, memory_system)
+    register_phase2b_tools(mcp, memory_system)  # memory_forget + memory_consolidate
+    register_phase3_tools(mcp, memory_system)   # memory_verify + memory_reflect
+    register_phase4_tools(mcp, memory_system)   # memory_replay + creative pool + environment
+    register_preference_tools(mcp, memory_system)  # 5 preference pipeline tools
 
     logger.info("MCP tools: memory_save, memory_recall, memory_status, "
                 "memory_associate, memory_forget, memory_consolidate, "
                 "memory_verify, memory_reflect, "
                 "memory_replay, memory_hypothesis_feedback, "
-                "memory_creative_pool, memory_check_environment")
+                "memory_creative_pool, memory_check_environment, "
+                "memory_extract_preferences, memory_get_preferences, "
+                "memory_check_preference_conflicts, memory_inject_preference, "
+                "memory_record_preference_feedback")
 
 
 # ---------------------------------------------------------------------------
@@ -169,9 +174,10 @@ def main() -> None:
             "with consolidation processor, LLM emotional scoring, "
             "falsifiable conditions, self-reflection, generative replay, "
             "and creative pool management. "
-            "Cell-mem provides 12 MCP tools: save, recall, status, associate, "
+            "Cell-mem provides 17 MCP tools: save, recall, status, associate, "
             "forget, consolidate, verify, reflect, replay, hypothesis_feedback, "
-            "creative_pool, check_environment."
+            "creative_pool, check_environment, extract_preferences, get_preferences, "
+            "check_preference_conflicts, inject_preference, record_preference_feedback."
         ),
         host=args.host,
         port=args.port,

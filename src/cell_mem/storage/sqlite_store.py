@@ -2,7 +2,7 @@
 
 This module is the foundation of Cell-mem's persistence layer. All memory layers
 write through this single store. WAL mode enables concurrent read/write without
-locking — critical for the background consolidation processor.
+locking — critical for Phase 2's background consolidation processor.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA_DDL = """
 -- ============================================================
@@ -123,7 +123,7 @@ CREATE TRIGGER IF NOT EXISTS semantic_au AFTER UPDATE ON semantic_memory BEGIN
 END;
 
 -- ============================================================
--- Graph: association edges between memory nodes
+-- Graph: association edges between memory nodes (Phase 2a)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS graph_nodes (
     id         TEXT PRIMARY KEY,
@@ -146,7 +146,7 @@ CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_id);
 
 -- ============================================================
--- Cold Storage: archived/forgotten episodic memories
+-- Cold Storage: archived/forgotten episodic memories (Phase 2b)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS cold_storage (
     id              TEXT PRIMARY KEY,
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS cold_storage (
 );
 
 -- ============================================================
--- Procedural Memory: task templates / skills
+-- Procedural Memory: task templates / skills (Phase 3)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS procedural_memory (
     id                  TEXT PRIMARY KEY,
@@ -205,7 +205,7 @@ CREATE TRIGGER IF NOT EXISTS procedural_au AFTER UPDATE ON procedural_memory BEG
 END;
 
 -- ============================================================
--- Creative Pool: generative replay hypotheses
+-- Creative Pool: generative replay hypotheses (Phase 4)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS creative_pool (
     id               TEXT PRIMARY KEY,
@@ -226,13 +226,59 @@ CREATE TABLE IF NOT EXISTS creative_pool (
 );
 
 -- ============================================================
--- Environment Snapshots: auto-falsifiable tracking
+-- Environment Snapshots: auto-falsifiable tracking (Phase 4)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS environment_snapshots (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_json    TEXT    NOT NULL,
     captured_at      TEXT    NOT NULL
 );
+
+-- ============================================================
+-- Preference Candidates: user preference extraction pipeline
+-- ============================================================
+CREATE TABLE IF NOT EXISTS preference_candidates (
+    id                    TEXT PRIMARY KEY,
+    preference_text       TEXT    NOT NULL,
+    preference_type       TEXT    NOT NULL DEFAULT 'general',
+    confidence            REAL    NOT NULL DEFAULT 0.3,
+    source_episode_ids    TEXT    NOT NULL DEFAULT '[]',
+    signal_strength       REAL    NOT NULL DEFAULT 0.0,
+    status                TEXT    NOT NULL DEFAULT 'pending',
+    conflict_with         TEXT,
+    falsifiable_condition TEXT,
+    trigger_context       TEXT,
+    lifecycle             TEXT    NOT NULL DEFAULT 'plastic',
+    push_count            INTEGER NOT NULL DEFAULT 0,
+    ignore_count          INTEGER NOT NULL DEFAULT 0,
+    last_pushed_at        TEXT,
+    created_at            TEXT    NOT NULL,
+    updated_at            TEXT    NOT NULL,
+    metadata_json         TEXT    NOT NULL DEFAULT '{}'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS preference_fts USING fts5(
+    preference_text, trigger_context,
+    content='preference_candidates',
+    content_rowid='rowid'
+);
+
+CREATE TRIGGER IF NOT EXISTS preference_ai AFTER INSERT ON preference_candidates BEGIN
+    INSERT INTO preference_fts(rowid, preference_text, trigger_context)
+    VALUES (new.rowid, new.preference_text, new.trigger_context);
+END;
+
+CREATE TRIGGER IF NOT EXISTS preference_ad AFTER DELETE ON preference_candidates BEGIN
+    INSERT INTO preference_fts(preference_fts, rowid, preference_text, trigger_context)
+    VALUES ('delete', old.rowid, old.preference_text, old.trigger_context);
+END;
+
+CREATE TRIGGER IF NOT EXISTS preference_au AFTER UPDATE ON preference_candidates BEGIN
+    INSERT INTO preference_fts(preference_fts, rowid, preference_text, trigger_context)
+    VALUES ('delete', old.rowid, old.preference_text, old.trigger_context);
+    INSERT INTO preference_fts(rowid, preference_text, trigger_context)
+    VALUES (new.rowid, new.preference_text, new.trigger_context);
+END;
 """
 
 

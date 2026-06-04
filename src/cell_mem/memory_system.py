@@ -6,9 +6,12 @@ in the correct dependency order and provides save/recall/status entry points.
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 from cell_mem.consolidation import (
     ConsolidationScorer,
@@ -52,7 +55,7 @@ class MemorySystem:
         vector_backend: str = "sqlite-vec",
         embedding_model_name: str = "all-MiniLM-L6-v2",
         embedding_device: str = "cpu",
-        # --- LLM configuration (all optional for backward compat) ---
+        # --- Phase 3: LLM configuration (all optional for backward compat) ---
         llm_client: Optional[Any] = None,  # Pre-constructed LLMClient (for testing)
         llm_backend: str = "openai",
         llm_api_key: str | None = None,
@@ -104,14 +107,14 @@ class MemorySystem:
             graph_store=None,  # Wired below after graph init
         )
 
-        # --- Graph store ---
+        # --- Phase 2a: real graph store ---
         self.graph = NetworkXGraphStore(self.store)
         self.search._graph = self.graph  # Enable two_pass strategy
 
-        # --- Consolidation ---
+        # --- Phase 2b: real consolidation ---
         from cell_mem.consolidation.emotional import RuleBasedScorer
 
-        # --- LLM client (auto-construct if api_key given) ---
+        # --- Phase 3: LLM client (auto-construct if api_key given) ---
         self.llm_client = llm_client
         if self.llm_client is None and llm_api_key is not None:
             from cell_mem.llm import OpenAIBackend, ClaudeBackend, RateLimiter
@@ -130,7 +133,7 @@ class MemorySystem:
             if self.llm_client:
                 logger.info("LLM client configured: backend=%s", llm_backend)
 
-        # --- Emotional scorer with LLM fallback chain ---
+        # --- Phase 3: Emotional scorer with LLM fallback chain ---
         if self.llm_client is not None:
             from cell_mem.consolidation.emotional import FallbackScorer, LLMScorer
 
@@ -147,7 +150,7 @@ class MemorySystem:
             embed_model=self.embed_model,
         )
 
-        # --- LLM-assisted pattern detection ---
+        # --- Phase 3: LLM-assisted pattern detection ---
         self.detector = PatternDetector(
             episodic=self.episodic,
             semantic=self.semantic,
@@ -162,22 +165,22 @@ class MemorySystem:
             store=self.store,
         )
 
-        # --- Procedural memory ---
+        # --- Phase 3: Procedural memory ---
         self.procedural = ProceduralMemory(self.store, self.embed_model)
 
-        # --- Reflection engine ---
+        # --- Phase 3: Reflection engine ---
         self.reflection = ReflectionEngine(
             episodic=self.episodic,
             llm_client=self.llm_client,
             embed_model=self.embed_model,
-            procedural=self.procedural,  # full 4-dim reflection
+            procedural=self.procedural,  # Phase 4: full 4-dim reflection
             semantic=self.semantic,
         )
 
-        # --- Condition evaluator ---
+        # --- Phase 3: Condition evaluator ---
         self.condition_eval = ConditionEvaluator(sqlite_store=self.store)
 
-        # --- Generative Replay Engine ---
+        # --- Phase 4: Generative Replay Engine ---
         enable_replay = True  # Always attempt; disabled if no LLM
         if enable_replay and self.llm_client is not None:
             from cell_mem.replay import CreativePool, GenerativeReplayEngine
@@ -202,6 +205,35 @@ class MemorySystem:
             self._replay_engine = None
             if enable_replay:
                 logger.info("Replay engine disabled — no LLM configured")
+
+        # --- Preference Pipeline: automatic user preference extraction/injection ---
+        from cell_mem.consolidation.preference import (
+            PreferenceSignalDetector,
+            PreferenceExtractor,
+            PreferenceProcessor,
+            PreferenceInjector,
+        )
+
+        self.pref_detector = PreferenceSignalDetector()
+        self.pref_extractor = PreferenceExtractor(
+            store=self.store,
+            embed_model=self.embed_model,
+            semantic=self.semantic,
+            llm_client=self.llm_client,
+        )
+        self.pref_processor = PreferenceProcessor(
+            store=self.store,
+            semantic=self.semantic,
+            condition_eval=self.condition_eval,
+            embed_model=self.embed_model,
+        )
+        self.pref_injector = PreferenceInjector(
+            procedural=self.procedural,
+            semantic=self.semantic,
+            embed_model=self.embed_model,
+            store=self.store,
+        )
+        logger.info("Preference pipeline ready (detector + extractor + processor + injector)")
 
         # --- Seed config ---
         if seed_config_path:
@@ -259,6 +291,8 @@ class MemorySystem:
                     was_in_wm=opts.get("was_in_wm", False),
                     metadata=opts.get("metadata"),
                 )
+                # Hook A: auto-detect preference signals on every episodic save
+                self._detect_preference_signals(content, obj.id, opts.get("valence", 0.0))
             elif mt == MemoryType.SEMANTIC:
                 obj = self.semantic.add(
                     content=content,
@@ -381,6 +415,7 @@ class MemorySystem:
                     "dimensions": 4,
                     "recent_count": len(self.reflection.get_recent_reflections(limit=10)),
                 },
+                preferences=self.pref_processor.stats(),
                 health="healthy",
             )
             return report.model_dump()
@@ -440,13 +475,18 @@ class MemorySystem:
         """Manually trigger a consolidation cycle.
 
         Runs scoring, forget candidate identification, cold storage archival,
-        and DBSCAN pattern detection.
+        DBSCAN pattern detection, and automatic preference extraction + decay.
 
         Returns:
             {"status": "ok", "data": {cycle_stats...}} or error dict.
         """
         try:
-            return self.scheduler.run_cycle()
+            result = self.scheduler.run_cycle()
+
+            # Hook B: Auto-extract preferences after consolidation cycle
+            self._run_preference_cycle()
+
+            return result
         except Exception as exc:
             logger.exception("Consolidate failed: %s", exc)
             return {"status": "error", "error": str(exc)}
@@ -527,7 +567,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Procedural memory API
+    # Phase 3: Procedural memory API
     # ------------------------------------------------------------------
 
     def save_procedural(
@@ -604,6 +644,8 @@ class MemorySystem:
         """Record success/failure outcome for a procedural template.
 
         Updates activation_weight via reinforcement learning factors.
+        Automatically feeds back to preference confidence if the template
+        was auto-generated from a user preference (Hook E — no manual call).
 
         Args:
             proc_id: The procedural template ID.
@@ -616,13 +658,21 @@ class MemorySystem:
             obj = self.procedural.record_outcome(proc_id, success)
             if obj is None:
                 return {"status": "error", "error": f"Template '{proc_id}' not found"}
+
+            # Hook E: Implicit preference feedback — auto-adjust preference
+            # confidence when a preference-derived template is used
+            try:
+                self.pref_injector.process_procedural_feedback(proc_id, success)
+            except Exception:
+                pass  # Non-critical — don't fail the main call
+
             return {"status": "ok", "data": obj.model_dump()}
         except Exception as exc:
             logger.exception("record_procedural_outcome failed: %s", exc)
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Reflection API
+    # Phase 3: Reflection API
     # ------------------------------------------------------------------
 
     def reflect(
@@ -634,7 +684,7 @@ class MemorySystem:
         Args:
             task_description: Description of the task.
             outcome: "failure" (default) or "success".
-            dimensions: "failure" (dimension 1 only),
+            dimensions: "failure" (Phase 3 compat, dim 1 only),
                         "all" (4 dimensions), or "strategy,gaps,process".
 
         Returns:
@@ -649,7 +699,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Falsifiable condition API
+    # Phase 3: Falsifiable condition API
     # ------------------------------------------------------------------
 
     def verify(self, entry_id: str, environment: dict | None = None) -> dict:
@@ -709,7 +759,7 @@ class MemorySystem:
             return {"status": "error", "error": str(exc)}
 
     # ------------------------------------------------------------------
-    # Generative Replay API
+    # Phase 4: Generative Replay API
     # ------------------------------------------------------------------
 
     def replay(self, theme_text: str | None = None) -> dict:
@@ -785,6 +835,230 @@ class MemorySystem:
         except Exception as exc:
             logger.exception("check_environment failed: %s", exc)
             return {"status": "error", "error": str(exc)}
+
+    # ------------------------------------------------------------------
+    # Preference Pipeline API
+    # ------------------------------------------------------------------
+
+    def extract_preferences(self, session_id: str | None = None, limit: int = 50) -> dict:
+        """Manually trigger preference extraction from recent episodes.
+
+        Normally runs automatically during consolidation cycles.
+        Use this to force extraction on demand.
+
+        Args:
+            session_id: Optional session filter.
+            limit: Max recent episodes to scan.
+
+        Returns:
+            {"status": "ok", "data": {"candidates_created": N, "signals_found": N}}
+        """
+        try:
+            episodes = self.episodic.load_all(limit=limit)
+            signals = self.pref_detector.batch_detect(episodes)
+            if not signals:
+                return {"status": "ok", "data": {"candidates_created": 0, "signals_found": 0}}
+
+            candidates = self.pref_extractor.extract(signals, episodes)
+            candidates = self.pref_extractor.deduplicate(candidates)
+
+            created = 0
+            for c in candidates:
+                self.pref_processor.add_candidate(c)
+                created += 1
+
+            logger.info("Preference extraction: %d signals → %d candidates", len(signals), created)
+            return {"status": "ok", "data": {"candidates_created": created, "signals_found": len(signals)}}
+        except Exception as exc:
+            logger.exception("extract_preferences failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
+    def get_preferences(
+        self,
+        context_text: str | None = None,
+        min_confidence: float = 0.3,
+        preference_type: str | None = None,
+    ) -> dict:
+        """Query active preferences, optionally filtered by context or type.
+
+        Args:
+            context_text: If provided, rank by relevance to this context.
+            min_confidence: Minimum confidence threshold.
+            preference_type: Filter by type (tool_choice, workflow, etc.).
+
+        Returns:
+            {"status": "ok", "data": {"preferences": [...], "count": N}}
+        """
+        try:
+            if preference_type:
+                prefs = self.pref_processor.get_by_type(preference_type, min_confidence)
+            else:
+                prefs = self.pref_processor.get_confirmed(limit=50)
+                prefs = [p for p in prefs if p["confidence"] >= min_confidence]
+
+            # If context provided, rank by relevance
+            if context_text and prefs and self.embed_model:
+                ctx_emb = self.embed_model.embed(context_text)
+                for p in prefs:
+                    try:
+                        pref_emb = self.embed_model.embed(p["preference_text"])
+                        p["relevance"] = round(float(
+                            np.dot(ctx_emb, pref_emb) /
+                            (np.linalg.norm(ctx_emb) * np.linalg.norm(pref_emb) + 1e-10)
+                        ), 3)
+                    except Exception:
+                        p["relevance"] = 0.5
+                prefs.sort(key=lambda x: x.get("relevance", 0), reverse=True)
+
+            return {"status": "ok", "data": {"preferences": prefs, "count": len(prefs)}}
+        except Exception as exc:
+            logger.exception("get_preferences failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
+    def check_preference_conflicts(self) -> dict:
+        """Detect contradictory preferences.
+
+        Returns:
+            {"status": "ok", "data": {"conflicts": [...], "count": N}}
+        """
+        try:
+            conflicts = self.pref_processor.detect_conflicts()
+            return {"status": "ok", "data": {"conflicts": conflicts, "count": len(conflicts)}}
+        except Exception as exc:
+            logger.exception("check_preference_conflicts failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
+    def inject_preference(self, preference_text: str, preference_type: str = "general",
+                         confidence: float = 0.7, trigger_context: str | None = None,
+                         falsifiable_condition: dict | None = None) -> dict:
+        """Manually add a preference (e.g., from explicit user statement).
+
+        Args:
+            preference_text: The preference statement.
+            preference_type: tool_choice, workflow, communication_style, skill_level.
+            confidence: Initial confidence (0.0-1.0).
+            trigger_context: When this preference should be activated (optional).
+            falsifiable_condition: Optional condition for auto-expiry.
+
+        Returns:
+            {"status": "ok", "data": {"preference_id": "..."}}
+        """
+        try:
+            candidate = {
+                "preference_text": preference_text,
+                "preference_type": preference_type,
+                "confidence": confidence,
+                "trigger_context": trigger_context,
+                "signal_strength": 0.8,
+                "source_episode_ids": [],
+                "metadata": {"source": "manual_injection"},
+            }
+            if falsifiable_condition:
+                candidate["falsifiable_condition"] = json.dumps(falsifiable_condition)
+
+            pref_id = self.pref_processor.add_candidate(candidate)
+            if confidence >= 0.6:
+                self.pref_processor.update_confidence(pref_id, 0.0)  # triggers promote
+
+            return {"status": "ok", "data": {"preference_id": pref_id}}
+        except Exception as exc:
+            logger.exception("inject_preference failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
+    def record_preference_feedback(self, preference_id: str, confirmed: bool) -> dict:
+        """Record feedback on whether a preference was accurate.
+
+        Normally auto-triggered via record_procedural_outcome() for
+        preference-derived procedural templates. Use this for manual feedback.
+
+        Args:
+            preference_id: ID from preference_candidates.
+            confirmed: True if preference accurately described user behavior.
+
+        Returns:
+            {"status": "ok", "data": {"new_confidence": X, "action": "..."}}
+        """
+        try:
+            delta = 0.1 if confirmed else -0.1
+            new_conf = self.pref_processor.update_confidence(preference_id, delta)
+            action = "strengthened" if confirmed else "weakened"
+            return {"status": "ok", "data": {"new_confidence": new_conf, "action": action}}
+        except Exception as exc:
+            logger.exception("record_preference_feedback failed: %s", exc)
+            return {"status": "error", "error": str(exc)}
+
+    # ------------------------------------------------------------------
+    # Internal: Preference Pipeline Hooks (fully automatic)
+    # ------------------------------------------------------------------
+
+    def _detect_preference_signals(self, content: str, episode_id: str, valence: float = 0.0) -> None:
+        """Hook A: Auto-detect preference signals after episodic save.
+
+        Runs inline — fast keyword check, no significant overhead.
+        Detected signals are cached in memory for the next consolidation cycle.
+        """
+        try:
+            if not self.pref_detector.has_signals(content):
+                return
+            signals = self.pref_detector.detect(content, episode_id, valence)
+            if signals:
+                # Store signals as metadata on the episode for later batch extraction
+                existing_meta = {}
+                try:
+                    ep = self.episodic.get(episode_id)
+                    if ep and ep.metadata:
+                        existing_meta = dict(ep.metadata)
+                except Exception:
+                    pass
+                existing_meta["_preference_signals"] = [s.to_dict() for s in signals]
+                self.episodic.update(episode_id, metadata=existing_meta)
+                logger.debug("Detected %d preference signal(s) in episode %s",
+                            len(signals), episode_id[:8])
+        except Exception as exc:
+            logger.debug("Preference signal detection skipped: %s", exc)
+
+    def _run_preference_cycle(self) -> None:
+        """Hook B+C: Run full preference extraction + processing cycle.
+
+        Called automatically after each consolidation cycle.
+        1. Scan recent episodes for preference signals
+        2. Extract candidates via LLM/heuristic
+        3. Deduplicate against existing preferences
+        4. Detect conflicts
+        5. Apply decay to stale preferences
+        """
+        try:
+            # 1. Scan recent episodic entries for signals
+            episodes = self.episodic.load_all(limit=100)
+            signals = self.pref_detector.batch_detect(episodes)
+            if not signals:
+                return
+
+            # 2. Extract candidates
+            candidates = self.pref_extractor.extract(signals, episodes)
+            candidates = self.pref_extractor.deduplicate(candidates)
+
+            # 3. Add new candidates (skip if similar preference already exists)
+            created = 0
+            for c in candidates:
+                existing_id = self.pref_extractor._check_existing(c.get("preference_text", ""))
+                if existing_id:
+                    # Boost existing preference confidence slightly
+                    self.pref_processor.update_confidence(existing_id, 0.02)
+                else:
+                    self.pref_processor.add_candidate(c)
+                    created += 1
+
+            # 4. Detect conflicts among active preferences
+            self.pref_processor.detect_conflicts()
+
+            # 5. Apply decay to stale preferences
+            decayed = self.pref_processor.apply_decay()
+
+            if created or decayed:
+                logger.info("Preference cycle: %d new, %d decayed", created, decayed)
+        except Exception as exc:
+            logger.debug("Preference cycle skipped (non-critical): %s", exc)
 
     # ------------------------------------------------------------------
     # Lifecycle
