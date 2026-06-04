@@ -230,6 +230,8 @@ class MemorySystem:
         Returns:
             {"status": "ok", "data": MemoryObject dict} or {"status": "error", "error": str}
         """
+        # Content length guard (32KB — prevents OOM from oversized payloads)
+        content = content[:32000]
         opts = options or {}
         try:
             mt = MemoryType(memory_type)

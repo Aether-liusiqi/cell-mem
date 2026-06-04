@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def register_save_tool(mcp, memory_system: "MemorySystem") -> None:  # noqa: F82
     )
     def memory_save(
         content: str,
-        memory_type: str = "episodic",
+        memory_type: Literal["working", "episodic", "semantic", "procedural"] = "episodic",
         options: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         return memory_system.save(content, memory_type, options)
