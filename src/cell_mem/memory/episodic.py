@@ -145,8 +145,9 @@ class EpisodicMemory:
         return results
 
     def recall_by_keyword(self, query: str, limit: int = 10) -> List[MemoryObject]:
-        """FTS5 keyword search."""
+        """FTS5 keyword search. Results are deduplicated by ID."""
         results = []
+        seen: set = set()
         try:
             ids = self._store.fetchall(
                 "SELECT rowid FROM episodic_fts WHERE episodic_fts MATCH ? LIMIT ?",
@@ -154,7 +155,8 @@ class EpisodicMemory:
             )
             for row in ids:
                 ep = self.get(str(row["rowid"]))  # FTS rowid → id
-                if ep:
+                if ep and ep.id not in seen:
+                    seen.add(ep.id)
                     results.append(ep)
         except Exception as exc:
             logger.warning("FTS search failed: %s", exc)

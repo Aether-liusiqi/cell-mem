@@ -437,10 +437,18 @@ class MemorySystem:
                 # Fallback: pure FTS5 keyword search (no embedding needed)
                 results = list(self.episodic.recall_by_keyword(query, limit=opts.get("limit", 10)))
 
+            # Deduplicate by ID (FTS5 may return same content via different matches)
+            seen: set = set()
+            unique = []
+            for obj in results:
+                if obj.id not in seen:
+                    seen.add(obj.id)
+                    unique.append(obj)
+
             return {
                 "status": "ok",
-                "data": [obj.model_dump() for obj in results],
-                "count": len(results),
+                "data": [obj.model_dump() for obj in unique],
+                "count": len(unique),
                 "fallback_fts5": not vector_ok or self._embed_worker.pending_count() > 0,
             }
         except Exception as exc:
