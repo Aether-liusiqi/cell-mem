@@ -187,8 +187,7 @@ def main() -> None:
     # Register tools
     register_all_tools(mcp, ms)
 
-    # Start background embedding worker (model loads in daemon thread)
-    ms._embed_worker.start()
+    # EmbeddingWorker auto-started during MemorySystem.__init__()
 
     # Run with chosen transport
     transport = "streamable-http" if args.http else "stdio"

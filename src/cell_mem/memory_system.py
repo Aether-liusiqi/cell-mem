@@ -255,7 +255,8 @@ class MemorySystem:
             episodic_vs=self.episodic_vs,
             semantic_vs=self.semantic_vs,
         )
-        logger.info("EmbeddingWorker created (background vectorization)")
+        self._embed_worker.start()  # Auto-start — loads model + processes in background
+        logger.info("EmbeddingWorker started (background vectorization)")
 
         # --- Seed config ---
         if seed_config_path:
@@ -422,6 +423,16 @@ class MemorySystem:
 
             if vector_ok and q_embedding is not None:
                 results = self.search.search_by_vector(q_embedding, opts, query_text=query)
+                # If vector search returns empty but embeddings are still pending,
+                # fall back to FTS5 so the user gets SOMETHING rather than nothing.
+                if not results and self._embed_worker.pending_count() > 0:
+                    fts5_results = list(self.episodic.recall_by_keyword(
+                        query, limit=opts.get("limit", 10)
+                    ))
+                    if fts5_results:
+                        results = fts5_results
+                        logger.debug("Vector search empty (pending=%d), fell back to FTS5",
+                                   self._embed_worker.pending_count())
             else:
                 # Fallback: pure FTS5 keyword search (no embedding needed)
                 results = list(self.episodic.recall_by_keyword(query, limit=opts.get("limit", 10)))
@@ -430,7 +441,7 @@ class MemorySystem:
                 "status": "ok",
                 "data": [obj.model_dump() for obj in results],
                 "count": len(results),
-                "fallback_fts5": not vector_ok,
+                "fallback_fts5": not vector_ok or self._embed_worker.pending_count() > 0,
             }
         except Exception as exc:
             logger.exception("Recall failed: %s", exc)
