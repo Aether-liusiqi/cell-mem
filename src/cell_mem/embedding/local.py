@@ -69,14 +69,51 @@ class EmbeddingModel:
         if self._model is not None:
             return
         t0 = time.time()
+        # Suppress verbose sentence-transformers/huggingface output during loading.
+        # These emit 100+ lines of download progress, tokenizer config, and model
+        # architecture details that flood stderr and can deadlock subprocess pipes.
+        import io
+        import sys
+        import warnings
+        from contextlib import redirect_stderr, redirect_stdout
+
         from sentence_transformers import SentenceTransformer
 
-        logger.info("Loading embedding model: %s ...", self._model_name)
-        self._model = SentenceTransformer(self._model_name, device=self._device)
+        # Silence transformers/model loading chatter at the logger level
+        for noisy_logger in (
+            "sentence_transformers", "transformers", "tokenizers",
+            "huggingface_hub", "filelock",
+        ):
+            logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
+        # Also suppress tqdm progress bars and stdout noise during loading.
+        # SentenceTransformer prints BERT LOAD REPORT tables and download bars
+        # that can't be caught at the logger level.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            devnull = io.StringIO()
+            try:
+                with redirect_stdout(devnull), redirect_stderr(devnull):
+                    logger.info("Loading embedding model: %s ...", self._model_name)
+                    self._model = SentenceTransformer(self._model_name, device=self._device)
+            except Exception:
+                # If redirect fails (e.g. IPython), load without suppression
+                self._model = SentenceTransformer(self._model_name, device=self._device)
+
+        # Restore log levels
+        for noisy_logger in (
+            "sentence_transformers", "transformers", "tokenizers",
+            "huggingface_hub", "filelock",
+        ):
+            logging.getLogger(noisy_logger).setLevel(logging.NOTSET)
+
         elapsed = time.time() - t0
-        logger.info(
-            "Model loaded in %.1fs (dim=%d)", elapsed, self._model.get_sentence_embedding_dimension()
-        )
+        # Use get_embedding_dimension (new API) with fallback to old method name
+        try:
+            dim = self._model.get_embedding_dimension()
+        except AttributeError:
+            dim = self._model.get_sentence_embedding_dimension()
+        logger.info("Model loaded in %.1fs (dim=%d)", elapsed, dim)
 
     @property
     def loaded(self) -> bool:

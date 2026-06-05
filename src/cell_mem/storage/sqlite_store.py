@@ -402,7 +402,16 @@ class SqliteStore:
     # ------------------------------------------------------------------
 
     def _load_vec_extension(self) -> bool:
-        """Load sqlite-vec extension. Returns True on success, False on failure."""
+        """Load sqlite-vec extension. Returns True on success, False on failure.
+
+        On Windows, sqlite-vec may fail to load (Errno 22 / EINVAL) when the
+        sqlite3 library bundled with the Python interpreter lacks extension
+        support or was compiled with different flags. Common fixes:
+        1. Use official Python from python.org (not MS Store or embedded).
+        2. Ensure sqlite3.dll in Python directory is from the same build.
+        3. Verify SQLite version >= 3.41: python -c "import sqlite3; print(sqlite3.sqlite_version)"
+        4. On failure, the system falls back to ChromaDB for vector search.
+        """
         import sqlite_vec
 
         conn = self.get_connection()
@@ -412,6 +421,19 @@ class SqliteStore:
             conn.enable_load_extension(False)
             logger.info("sqlite-vec extension loaded successfully")
             return True
+        except (OSError, AttributeError) as exc:
+            err_msg = str(exc)
+            if "Errno 22" in err_msg or "error 22" in err_msg.lower():
+                logger.warning(
+                    "sqlite-vec failed to load (Errno 22/EINVAL — likely sqlite3 "
+                    "library incompatibility). Vector search will use ChromaDB backend. "
+                    "To fix: reinstall Python from python.org or "
+                    "pip install pysqlite3-binary && pip install sqlite-vec --force-reinstall. "
+                    "Error details: %s", err_msg
+                )
+            else:
+                logger.warning("Failed to load sqlite-vec extension: %s", exc)
+            return False
         except Exception as exc:
             logger.warning("Failed to load sqlite-vec extension: %s", exc)
             return False

@@ -265,6 +265,12 @@ class MemorySystem:
         # Content length guard (32KB — prevents OOM from oversized payloads)
         content = content[:32000]
         opts = options or {}
+        # Extract tags from options (can be passed at top level or in metadata)
+        tags = opts.get("tags", [])
+        if not tags and opts.get("metadata"):
+            tags = opts.get("metadata", {}).get("tags", [])
+        if not isinstance(tags, list):
+            tags = []
         try:
             mt = MemoryType(memory_type)
         except ValueError:
@@ -312,10 +318,31 @@ class MemorySystem:
             else:
                 return {"status": "error", "error": f"memory_type '{memory_type}' not supported"}
 
+            # Apply tags if provided (post-store UPDATE)
+            if tags:
+                self._apply_tags(obj.id, mt, tags)
+                obj.tags = tags
+
             return {"status": "ok", "data": obj.model_dump()}
         except Exception as exc:
             logger.exception("Save failed: %s", exc)
             return {"status": "error", "error": str(exc)}
+
+    def _apply_tags(self, obj_id: str, mt: MemoryType, tags: list) -> None:
+        """Update tags_json on a stored memory object."""
+        table_map = {
+            MemoryType.WORKING: "working_memory",
+            MemoryType.EPISODIC: "episodic_memory",
+            MemoryType.SEMANTIC: "semantic_memory",
+            MemoryType.PROCEDURAL: "procedural_memory",
+        }
+        table = table_map.get(mt)
+        if table:
+            self.store.execute(
+                f"UPDATE {table} SET tags_json = ? WHERE id = ?",
+                (json.dumps(tags, ensure_ascii=False), obj_id),
+            )
+            self.store.commit()
 
     def recall(
         self,
@@ -387,6 +414,7 @@ class MemorySystem:
                 vector_index={
                     "dimension": 384,
                     "backend": "sqlite-vec" if self.store.vec_available else "chromadb",
+                    "db_path": str(self.store._db_path),
                 },
                 graph={
                     "node_count": self.graph.node_count(),

@@ -155,10 +155,12 @@ class ChromaStore(VectorStore):
         self, id: str, vector: np.ndarray, metadata: dict | None = None
     ) -> None:
         vec = np.asarray(vector, dtype=np.float32).ravel()
+        # ChromaDB requires non-empty metadata — use a placeholder if none provided
+        safe_meta = metadata if metadata else {"_id": id}
         self._collection.upsert(
             ids=[id],
             embeddings=[vec.tolist()],
-            metadatas=[metadata or {}],
+            metadatas=[safe_meta],
         )
 
     def search(
