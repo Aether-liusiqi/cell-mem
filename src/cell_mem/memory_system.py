@@ -60,6 +60,7 @@ class MemorySystem:
         llm_backend: str = "openai",
         llm_api_key: str | None = None,
         llm_daily_limit: int = 100,
+        # llm_api_key falls back to CELL_MEM_LLM_API_KEY env, then OPENAI_API_KEY
         # --- HTTP authentication ---
         api_key: str | None = None,  # Shared secret for HTTP mode (Codex finding #1)
     ):
@@ -115,6 +116,15 @@ class MemorySystem:
         from cell_mem.consolidation.emotional import RuleBasedScorer
 
         # --- Phase 3: LLM client (auto-construct if api_key given) ---
+        # Priority: explicit parameter > CELL_MEM_LLM_API_KEY > backend env vars
+        import os as _os
+        if llm_api_key is None:
+            llm_api_key = _os.environ.get("CELL_MEM_LLM_API_KEY")
+        if llm_api_key is None and llm_backend == "openai":
+            llm_api_key = _os.environ.get("OPENAI_API_KEY")
+        if llm_api_key is None and llm_backend == "claude":
+            llm_api_key = _os.environ.get("ANTHROPIC_API_KEY")
+
         self.llm_client = llm_client
         if self.llm_client is None and llm_api_key is not None:
             from cell_mem.llm import OpenAIBackend, ClaudeBackend, RateLimiter
@@ -394,21 +404,33 @@ class MemorySystem:
         """
         opts = options or {}
         try:
-            # Embed query once, reuse for refresh and search
-            q_embedding = self.embed_model.embed_query(query)
+            # Try embedding-based vector search first
+            try:
+                q_embedding = self.embed_model.embed_query(query)
+                vector_ok = True
+            except Exception as emb_err:
+                logger.debug("Embedding unavailable, falling back to FTS5: %s", emb_err)
+                q_embedding = None
+                vector_ok = False
 
             # Proactive refresh of working memory (lazy, not background thread)
-            if self.working.should_refresh():
+            if vector_ok and self.working.should_refresh():
                 try:
                     self.working.proactive_refresh(q_embedding, self.embed_model)
                 except Exception:
                     pass  # Refresh failure is non-fatal
 
-            results = self.search.search_by_vector(q_embedding, opts, query_text=query)
+            if vector_ok and q_embedding is not None:
+                results = self.search.search_by_vector(q_embedding, opts, query_text=query)
+            else:
+                # Fallback: pure FTS5 keyword search (no embedding needed)
+                results = list(self.episodic.recall_by_keyword(query, limit=opts.get("limit", 10)))
+
             return {
                 "status": "ok",
                 "data": [obj.model_dump() for obj in results],
                 "count": len(results),
+                "fallback_fts5": not vector_ok,
             }
         except Exception as exc:
             logger.exception("Recall failed: %s", exc)

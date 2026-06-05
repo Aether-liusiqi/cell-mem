@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -66,8 +67,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--db",
-        default=DEFAULT_DB_PATH,
-        help=f"SQLite database path (default: {DEFAULT_DB_PATH})",
+        default=os.environ.get("CELL_MEM_DB", DEFAULT_DB_PATH),
+        help=f"SQLite database path (default: $CELL_MEM_DB or {DEFAULT_DB_PATH})",
     )
     parser.add_argument(
         "--seed-config",

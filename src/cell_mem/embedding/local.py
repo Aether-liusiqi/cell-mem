@@ -98,12 +98,15 @@ class EmbeddingModel:
         )
 
     def _try_onnx(self) -> bool:
-        """Try loading ONNX model. Returns True on success."""
+        """Try loading ONNX model. Returns True on success.
+        On failure, self._model is NOT modified — leaves clean state for PyTorch fallback.
+        """
         try:
             from cell_mem.embedding.onnx import ONNXEmbeddingModel
 
-            self._model = ONNXEmbeddingModel()
-            self._model.ensure_loaded()
+            candidate = ONNXEmbeddingModel()
+            candidate.ensure_loaded()  # Throws if no model file
+            self._model = candidate     # Only assign after successful load
             logger.info("ONNX embedding backend loaded (zero PyTorch)")
             return True
         except (FileNotFoundError, ImportError, Exception) as exc:
