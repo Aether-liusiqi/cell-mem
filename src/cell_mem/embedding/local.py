@@ -36,11 +36,10 @@ def _ensure_hf_mirror() -> None:
 
 
 class EmbeddingModel:
-    """Thin wrapper around sentence-transformers for text → vector encoding.
+    """Text → vector encoding with auto backend selection.
 
-    On first use, downloads ~90MB model to the HuggingFace cache. Subsequent
-    loads are instant. The model is loaded lazily — call ensure_loaded() to
-    force eager loading, or let embed() trigger it automatically.
+    Tries ONNX first (zero PyTorch, ~100MB disk, ~0.5s load),
+    falls back to sentence-transformers (needs PyTorch, ~4GB disk).
 
     Usage:
         model = EmbeddingModel()
@@ -56,48 +55,85 @@ class EmbeddingModel:
         model_name: str = DEFAULT_MODEL,
         device: str = "cpu",
         preload: bool = False,
+        backend: str = "auto",
     ):
         _ensure_hf_mirror()
         self._model_name = model_name
         self._device = device
-        self._model: Optional[object] = None  # SentenceTransformer
+        self._backend = backend
+        self._model: Optional[object] = None  # ONNXEmbeddingModel or SentenceTransformer
+        self._onnx_first = None  # Tri-state: None=unknown, True=using ONNX, False=PyTorch
         if preload:
             self.ensure_loaded()
 
+    @property
+    def loaded(self) -> bool:
+        return self._model is not None
+
+    @property
+    def using_onnx(self) -> bool:
+        """Whether the model was loaded via ONNX Runtime (vs PyTorch)."""
+        return self._onnx_first is True
+
     def ensure_loaded(self) -> None:
-        """Load the model if not already loaded. Blocks ~2-5s on first call."""
+        """Load the model. Tries ONNX first, falls back to PyTorch."""
         if self._model is not None:
             return
+
+        # 1. Try ONNX if auto or onnx backend
+        if self._backend in ("auto", "onnx"):
+            if self._try_onnx():
+                self._onnx_first = True
+                return
+
+        # 2. Fall back to PyTorch / sentence-transformers
+        if self._backend in ("auto", "pytorch"):
+            self._load_pytorch()
+            self._onnx_first = False
+            return
+
+        raise RuntimeError(
+            f"Cannot load embedding model (backend={self._backend}). "
+            f"Install sentence-transformers or export the ONNX model."
+        )
+
+    def _try_onnx(self) -> bool:
+        """Try loading ONNX model. Returns True on success."""
+        try:
+            from cell_mem.embedding.onnx import ONNXEmbeddingModel
+
+            self._model = ONNXEmbeddingModel()
+            self._model.ensure_loaded()
+            logger.info("ONNX embedding backend loaded (zero PyTorch)")
+            return True
+        except (FileNotFoundError, ImportError, Exception) as exc:
+            logger.debug("ONNX backend unavailable: %s", exc)
+            return False
+
+    def _load_pytorch(self) -> None:
+        """Load via sentence-transformers (PyTorch)."""
         t0 = time.time()
-        # Suppress verbose sentence-transformers/huggingface output during loading.
-        # These emit 100+ lines of download progress, tokenizer config, and model
-        # architecture details that flood stderr and can deadlock subprocess pipes.
         import io
-        import sys
         import warnings
         from contextlib import redirect_stderr, redirect_stdout
 
         from sentence_transformers import SentenceTransformer
 
-        # Silence transformers/model loading chatter at the logger level
+        # Silence transformers/model loading chatter
         for noisy_logger in (
             "sentence_transformers", "transformers", "tokenizers",
             "huggingface_hub", "filelock",
         ):
             logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-        # Also suppress tqdm progress bars and stdout noise during loading.
-        # SentenceTransformer prints BERT LOAD REPORT tables and download bars
-        # that can't be caught at the logger level.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             devnull = io.StringIO()
             try:
                 with redirect_stdout(devnull), redirect_stderr(devnull):
-                    logger.info("Loading embedding model: %s ...", self._model_name)
+                    logger.info("Loading embedding model (PyTorch): %s ...", self._model_name)
                     self._model = SentenceTransformer(self._model_name, device=self._device)
             except Exception:
-                # If redirect fails (e.g. IPython), load without suppression
                 self._model = SentenceTransformer(self._model_name, device=self._device)
 
         # Restore log levels
@@ -122,11 +158,15 @@ class EmbeddingModel:
     def embed(self, text: str) -> np.ndarray:
         """Encode a single text → (384,) float32 array."""
         self.ensure_loaded()
+        if self._onnx_first:
+            return self._model.embed(text)
         return self._model.encode(text, normalize_embeddings=True).astype(np.float32)
 
     def embed_batch(self, texts: List[str]) -> np.ndarray:
         """Encode a batch → (N, 384) float32 array."""
         self.ensure_loaded()
+        if self._onnx_first:
+            return self._model.embed_batch(texts)
         return self._model.encode(
             texts, normalize_embeddings=True, show_progress_bar=False
         ).astype(np.float32)

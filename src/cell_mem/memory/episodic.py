@@ -56,20 +56,11 @@ class EpisodicMemory:
         was_in_wm: bool = False,
         metadata: dict | None = None,
     ) -> MemoryObject:
-        """Embed content, project to 2048d sparse, store both.
+        """Store episode immediately. Embedding is computed async in background.
 
-        Returns the created MemoryObject.
+        Content is FTS5-indexed and instantly searchable. Embedding and
+        projection vectors are filled in later by EmbeddingWorker.
         """
-        import sqlite_vec
-
-        # Embed
-        embedding = self._embed.embed(content)
-        proj_vec = self._proj.project(embedding)
-
-        # Serialize
-        emb_blob = sqlite_vec.serialize_float32(embedding.tolist())
-        proj_blob = sqlite_vec.serialize_float32(proj_vec.tolist())
-
         now = datetime.now(timezone.utc).isoformat()
 
         obj = MemoryObject(
@@ -92,12 +83,10 @@ class EpisodicMemory:
                 session_id, task_id, created_at, event_at,
                 valid_until, invalidated_at,
                 tags_json, source_refs_json, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 obj.id,
                 row["content"],
-                emb_blob,
-                proj_blob,
                 row["confidence"],
                 row["valence"],
                 row["consolidation_score"],
@@ -108,17 +97,14 @@ class EpisodicMemory:
                 row.get("event_at"),
                 row.get("valid_until"),
                 row.get("invalidated_at"),
-                row["tags_json"],
-                row["source_refs_json"],
-                row["metadata_json"],
+                row.get("tags_json"),
+                row.get("source_refs_json"),
+                row.get("metadata_json"),
             ),
         )
         self._store.commit()
 
-        # Index in vector store
-        self._vs.insert(obj.id, embedding)
-
-        logger.debug("Episodic stored: %s", obj.id)
+        logger.debug("Episodic stored: %s (embedding pending)", obj.id[:8])
         return obj
 
     def get(self, episode_id: str) -> Optional[MemoryObject]:

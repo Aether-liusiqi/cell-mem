@@ -235,12 +235,46 @@ class MemorySystem:
         )
         logger.info("Preference pipeline ready (detector + extractor + processor + injector)")
 
+        # --- Embedding Worker: async background vectorization ---
+        from cell_mem.embedding.worker import EmbeddingWorker
+
+        self._embed_worker = EmbeddingWorker(
+            store=self.store,
+            embed_model=self.embed_model,
+            projection=self.projection,
+            episodic_vs=self.episodic_vs,
+            semantic_vs=self.semantic_vs,
+        )
+        logger.info("EmbeddingWorker created (background vectorization)")
+
         # --- Seed config ---
         if seed_config_path:
             count = self.semantic.import_seed_config(seed_config_path)
             logger.info("Seed config imported: %d entries", count)
 
         logger.info("=== MemorySystem ready ===")
+
+    def _inject_embed_model(self, mock) -> None:
+        """Replace the embedding model everywhere (for testing).
+
+        Patches self.embed_model and all component-internal references
+        so no real SentenceTransformer is loaded during tests.
+        """
+        self.embed_model = mock
+        for comp in [
+            self.episodic, self.semantic, self.search, self.scorer,
+            self.procedural, self.reflection, self.pref_extractor,
+            self.pref_processor, self.pref_injector,
+        ]:
+            if hasattr(comp, "_embed"):
+                comp._embed = mock
+        # Creative pool and replay engine may be None
+        if self.creative_pool and hasattr(self.creative_pool, "_embed"):
+            self.creative_pool._embed = mock
+        if self._replay_engine and hasattr(self._replay_engine, "_embed"):
+            self._replay_engine._embed = mock
+        if hasattr(self, "_embed_worker") and self._embed_worker:
+            self._embed_worker._embed = mock
 
     # ------------------------------------------------------------------
     # Public API (used by MCP tools)
@@ -415,6 +449,9 @@ class MemorySystem:
                     "dimension": 384,
                     "backend": "sqlite-vec" if self.store.vec_available else "chromadb",
                     "db_path": str(self.store._db_path),
+                    "embed_model_ready": getattr(self.embed_model, "loaded", False),
+                    "pending_embeddings": self._embed_worker.pending_count(),
+                    "background_processed": self._embed_worker.processed_count,
                 },
                 graph={
                     "node_count": self.graph.node_count(),
@@ -1094,5 +1131,6 @@ class MemorySystem:
 
     def shutdown(self) -> None:
         """Close connections and release resources."""
+        self._embed_worker.stop()
         self.store.close()
         logger.info("MemorySystem shut down")

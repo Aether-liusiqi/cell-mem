@@ -155,13 +155,13 @@ def main() -> None:
         api_key=args.api_key,
     )
 
-    # Preload embedding model: always for HTTP, or if --preload flag set.
-    # For stdio mode without --preload, the first request pays the 30s cost.
-    if args.preload or not args.http:
+    # Preload embedding model only when --preload flag is explicitly passed.
+    # In stdio mode without --preload, model loads lazily on first tool call.
+    # This prevents MCP handshake timeout from 27s cold-start model loading.
+    if args.preload:
         logger.info("Preloading embedding model...")
         ms.embed_model.ensure_loaded()
-        logger.info("Embedding model ready (dim=%d, %.1fs startup)",
-                     ms.embed_model.DIM, 0.0)
+        logger.info("Embedding model ready (dim=%d)", ms.embed_model.DIM)
 
     # Create FastMCP server
     from mcp.server.fastmcp import FastMCP
@@ -185,6 +185,9 @@ def main() -> None:
 
     # Register tools
     register_all_tools(mcp, ms)
+
+    # Start background embedding worker (model loads in daemon thread)
+    ms._embed_worker.start()
 
     # Run with chosen transport
     transport = "streamable-http" if args.http else "stdio"

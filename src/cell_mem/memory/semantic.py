@@ -56,12 +56,11 @@ class SemanticMemory:
         source_references: List[str] | None = None,
         metadata: dict | None = None,
     ) -> MemoryObject:
-        """Create a semantic knowledge entry with embedding."""
-        import sqlite_vec
+        """Create a semantic knowledge entry. Embedding computed async in background.
 
-        embedding = self._embed.embed(content)
-        emb_blob = sqlite_vec.serialize_float32(embedding.tolist())
-
+        Content is FTS5-indexed and instantly searchable. Embedding vector
+        is filled in later by EmbeddingWorker.
+        """
         now = datetime.now(timezone.utc).isoformat()
         lifecycle = self._confidence_to_lifecycle(confidence)
 
@@ -84,11 +83,10 @@ class SemanticMemory:
                 id, content, embedding, confidence, lifecycle,
                 falsifiable_condition, invalidated_at, source_refs_json,
                 created_at, updated_at, tags_json, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 obj.id,
                 row["content"],
-                emb_blob,
                 row["confidence"],
                 row["lifecycle"],
                 fc_json,
@@ -102,10 +100,7 @@ class SemanticMemory:
         )
         self._store.commit()
 
-        # Index in vector store
-        self._vs.insert(obj.id, embedding)
-
-        logger.debug("Semantic added: %s (confidence=%.2f, lifecycle=%s)", obj.id, confidence, lifecycle)
+        logger.debug("Semantic added: %s (confidence=%.2f, embedding pending)", obj.id[:8], confidence)
         return obj
 
     def update(
@@ -126,15 +121,11 @@ class SemanticMemory:
         lifecycle = self._confidence_to_lifecycle(new_confidence)
 
         if content is not None and content != existing.content:
-            import sqlite_vec
-
-            embedding = self._embed.embed(content)
-            emb_blob = sqlite_vec.serialize_float32(embedding.tolist())
+            # Content changed — set embedding to NULL, worker will re-compute
             self._store.execute(
-                f"UPDATE {self._table} SET content = ?, embedding = ? WHERE id = ?",
-                (content, emb_blob, knowledge_id),
+                f"UPDATE {self._table} SET content = ?, embedding = NULL WHERE id = ?",
+                (content, knowledge_id),
             )
-            self._vs.insert(knowledge_id, embedding)
 
         fc_json = (
             json.dumps(falsifiable_condition, ensure_ascii=False)
