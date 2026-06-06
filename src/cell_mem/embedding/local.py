@@ -57,12 +57,14 @@ class EmbeddingModel:
         preload: bool = False,
         backend: str = "auto",
     ):
+        import threading
         _ensure_hf_mirror()
         self._model_name = model_name
         self._device = device
         self._backend = backend
         self._model: Optional[object] = None  # ONNXEmbeddingModel or SentenceTransformer
         self._onnx_first = None  # Tri-state: None=unknown, True=using ONNX, False=PyTorch
+        self._load_lock = threading.Lock()
         if preload:
             self.ensure_loaded()
 
@@ -76,26 +78,31 @@ class EmbeddingModel:
         return self._onnx_first is True
 
     def ensure_loaded(self) -> None:
-        """Load the model. Tries ONNX first, falls back to PyTorch."""
-        if self._model is not None:
-            return
+        """Load the model. Tries ONNX first, falls back to PyTorch.
 
-        # 1. Try ONNX if auto or onnx backend
-        if self._backend in ("auto", "onnx"):
-            if self._try_onnx():
-                self._onnx_first = True
+        Thread-safe: uses internal lock so concurrent calls from EmbeddingWorker
+        and main thread don't load the model twice.
+        """
+        with self._load_lock:
+            if self._model is not None:
                 return
 
-        # 2. Fall back to PyTorch / sentence-transformers
-        if self._backend in ("auto", "pytorch"):
-            self._load_pytorch()
-            self._onnx_first = False
-            return
+            # 1. Try ONNX if auto or onnx backend
+            if self._backend in ("auto", "onnx"):
+                if self._try_onnx():
+                    self._onnx_first = True
+                    return
 
-        raise RuntimeError(
-            f"Cannot load embedding model (backend={self._backend}). "
-            f"Install sentence-transformers or export the ONNX model."
-        )
+            # 2. Fall back to PyTorch / sentence-transformers
+            if self._backend in ("auto", "pytorch"):
+                self._load_pytorch()
+                self._onnx_first = False
+                return
+
+            raise RuntimeError(
+                f"Cannot load embedding model (backend={self._backend}). "
+                f"Install sentence-transformers or export the ONNX model."
+            )
 
     def _try_onnx(self) -> bool:
         """Try loading ONNX model. Returns True on success.

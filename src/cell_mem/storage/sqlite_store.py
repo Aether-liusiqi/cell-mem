@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS working_memory (
     task_completed   INTEGER NOT NULL DEFAULT 0,
     session_id       TEXT    NOT NULL,
     created_at       TEXT    NOT NULL,
+    tags_json        TEXT    NOT NULL DEFAULT '[]',
     metadata_json    TEXT    NOT NULL DEFAULT '{}'
 );
 
@@ -345,6 +346,15 @@ class SqliteStore:
         conn = self.get_connection()
         conn.executescript(_SCHEMA_DDL)
         conn.commit()
+
+        # --- Schema migrations for existing databases ---
+        # v6→v7: working_memory missing tags_json column
+        try:
+            conn.execute(
+                "ALTER TABLE working_memory ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'"
+            )
+        except Exception:
+            pass  # Column already exists or table doesn't exist yet
 
         # Record schema version
         self._set_meta("schema_version", str(SCHEMA_VERSION).encode("utf-8"))

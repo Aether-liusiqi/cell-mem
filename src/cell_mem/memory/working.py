@@ -80,7 +80,7 @@ class WorkingMemory:
         _WM_COLS = {
             "id", "content", "attention_score", "base_priority", "relevance",
             "last_accessed_at", "was_referenced", "task_completed",
-            "session_id", "created_at", "metadata_json",
+            "session_id", "created_at", "tags_json", "metadata_json",
         }
         row = obj.to_row_dict(exclude={
             "memory_type", "valence", "consolidation_score", "was_in_wm",

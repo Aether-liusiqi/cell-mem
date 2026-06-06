@@ -1,5 +1,15 @@
 # Cell-mem 修复记录
 
+## 第 5 轮 — 2026-06-06 — Codex v3 测试报告
+
+| # | 问题 | 修复 | 文件 |
+|---|------|------|------|
+| 1 | associate 不校验 ID 存在，幽灵节点 | 前置检查：遍历 4 层确认两 ID 均存在 | `memory_system.py` |
+| 2 | working_memory 表缺 tags_json 列 | DDL 加列 + 迁移 + working.py add() 写入 | `sqlite_store.py` `working.py` |
+| 3 | ensure_loaded() 线程不安全，双线程同时加载 | 加 `threading.Lock` 保护 | `embedding/local.py` |
+
+---
+
 ## 第 4 轮 — 2026-06-06 — Codex v2.0 功能测试
 
 | # | 问题 | 修复 | 文件 |

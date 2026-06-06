@@ -572,6 +572,25 @@ class MemorySystem:
                     "error": f"Invalid relation_type '{relation_type}'. Must be one of: {sorted(valid_types)}",
                 }
 
+            # Validate that both IDs exist (prevent ghost node creation)
+            for mem_id, role in [(source_id, "source"), (target_id, "target")]:
+                if not mem_id or not mem_id.strip():
+                    return {
+                        "status": "error",
+                        "error": f"{role}_id must be a non-empty string",
+                    }
+                found = (
+                    self.episodic.get(mem_id) or
+                    self.semantic.get(mem_id) or
+                    self.working.get(mem_id) or
+                    self.procedural.get(mem_id)
+                )
+                if not found:
+                    return {
+                        "status": "error",
+                        "error": f"{role}_id '{mem_id[:20]}' not found in any memory layer",
+                    }
+
             self.graph.add_edge(source_id, target_id, weight, relation_type)
             return {
                 "status": "ok",
