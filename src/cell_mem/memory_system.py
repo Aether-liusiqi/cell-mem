@@ -423,6 +423,15 @@ class MemorySystem:
 
             if vector_ok and q_embedding is not None:
                 results = self.search.search_by_vector(q_embedding, opts, query_text=query)
+                # Post-filter: for keyword queries, drop results that don't match
+                # any query token via FTS5. Prevents random-noise matches from mock
+                # or poor-quality embeddings.
+                if results and query and len(query) >= 2:
+                    fts5_ids = {
+                        ep.id for ep in self.episodic.recall_by_keyword(query, limit=50)
+                    }
+                    if fts5_ids:
+                        results = [r for r in results if r.id in fts5_ids]
                 # If vector search returns empty but embeddings are still pending,
                 # fall back to FTS5 so the user gets SOMETHING rather than nothing.
                 if not results and self._embed_worker.pending_count() > 0:
@@ -575,7 +584,8 @@ class MemorySystem:
             }
         except Exception as exc:
             logger.exception("Associate failed: %s", exc)
-            return {"status": "error", "error": str(exc)}
+            err_msg = str(exc).strip() or f"Graph association failed ({type(exc).__name__})"
+            return {"status": "error", "error": err_msg}
 
     def consolidate(self) -> dict:
         """Manually trigger a consolidation cycle.
