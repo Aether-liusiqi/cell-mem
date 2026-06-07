@@ -191,28 +191,42 @@ def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str
     lines = _read_lines(config_path)
     new_lines: List[str] = []
     hooks_enabled = False
-    state_key = f"{config_path.parent / 'hooks.json'}:post_tool_use:0:0"
-    hash_set = False
+    posix_script = _posix_path(script_path)
+    skip_block = False  # True while inside a cell_mem [hooks.state] block
 
     for line in lines:
         stripped = line.strip()
+
         if stripped.startswith("hooks ="):
             new_lines.append("hooks = true\n")
             hooks_enabled = True
-        elif f"trusted_hash = " in stripped and state_key in stripped:
-            # Will be rewritten below
             continue
-        else:
-            new_lines.append(line)
+
+        # Detect start of a cell_mem [hooks.state] block — skip it entirely
+        if stripped.startswith("[hooks.state") and "cell_mem_session_hook" in stripped:
+            skip_block = True
+            continue
+
+        # Skip trusted_hash line inside a cell_mem block, then end skip
+        if skip_block and stripped.startswith("trusted_hash"):
+            skip_block = False
+            continue
+
+        # End of block (empty line or next section after cell_mem block)
+        if skip_block and (stripped == "" or stripped.startswith("[")):
+            skip_block = False
+
+        if skip_block:
+            continue
+
+        new_lines.append(line)
 
     # Ensure hooks=true
     if not hooks_enabled:
         new_lines.append("\nhooks = true\n")
 
-    # Add trusted_hash under [hooks.state]
-    if "[hooks.state]" not in "".join(new_lines):
-        new_lines.append("\n[hooks.state]\n")
-    new_lines.append(f"[hooks.state.'{_posix_path(script_path)}']\n")
+    # Append new trusted_hash entry (idempotent — we removed the old one above)
+    new_lines.append(f"\n[hooks.state.'{posix_script}']\n")
     new_lines.append(f"trusted_hash = \"{trusted_hash}\"\n")
 
     _write_lines(config_path, new_lines)
