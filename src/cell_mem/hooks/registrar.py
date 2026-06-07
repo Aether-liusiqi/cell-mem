@@ -141,38 +141,32 @@ def _register_codex(ingest_port: int) -> bool:
     hooks_json_path = codex / "hooks.json"
     hooks_json = _read_json(hooks_json_path)
 
-    # Cell-mem hook entries (supported events)
     # Use POSIX paths — JSON backslash escaping corrupts Windows paths
     script_cmd = _posix_path(script_path)
-    cell_mem_entries = [
-        {
-            "matcher": "SessionStart",
-            "command": ["python", script_cmd],
-            "env": {"CELL_MEM_INGEST_PORT": str(ingest_port)},
-        },
-        {
-            "matcher": "PostToolUse",
-            "command": ["python", script_cmd],
-            "env": {"CELL_MEM_INGEST_PORT": str(ingest_port)},
-        },
-    ]
+    hook_env = {"CELL_MEM_INGEST_PORT": str(ingest_port)}
+    cell_mem_command = {"command": ["python", script_cmd], "env": hook_env}
 
-    # Merge: Codex uses "post_tool_use" as the event key
-    existing = hooks_json.get("post_tool_use", [])
+    # SessionStart and PostToolUse are separate top-level event keys.
+    # "matcher" is only meaningful for PostToolUse (filters tool names).
+    # Remove any previous cell_mem entries from all event keys.
+    for event_key in ("session_start", "post_tool_use"):
+        existing = hooks_json.get(event_key, [])
+        existing = [
+            e for e in existing
+            if not any("cell_mem_session_hook" in str(arg) for arg in (e.get("command", [])))
+        ]
+        hooks_json[event_key] = existing
 
-    # Remove any previous cell_mem entries (by command path match)
-    existing = [
-        e
-        for e in existing
-        if not any(
-            "cell_mem_session_hook" in str(arg)
-            for arg in (e.get("command", []))
-        )
-    ]
+    # SessionStart: no matcher needed (event-level hook)
+    hooks_json.setdefault("session_start", []).append(cell_mem_command)
 
-    hooks_json["post_tool_use"] = existing + cell_mem_entries
+    # PostToolUse: matcher="" means all tools
+    hooks_json.setdefault("post_tool_use", []).append(
+        {**cell_mem_command, "matcher": ""}
+    )
+
     _write_json(hooks_json_path, hooks_json)
-    logger.info("Codex hooks.json updated (%d hook entries)", len(hooks_json["post_tool_use"]))
+    logger.info("Codex hooks.json updated (session_start + post_tool_use)")
 
     # 3. Update config.toml
     config_toml_path = codex / "config.toml"
@@ -225,9 +219,11 @@ def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str
     if not hooks_enabled:
         new_lines.append("\nhooks = true\n")
 
-    # Append new trusted_hash entry (idempotent — we removed the old one above)
-    new_lines.append(f"\n[hooks.state.'{posix_script}']\n")
-    new_lines.append(f"trusted_hash = \"{trusted_hash}\"\n")
+    # Append trusted_hash entries for both session_start and post_tool_use
+    new_lines.append("\n")
+    for event_idx, event_key in enumerate(("session_start", "post_tool_use")):
+        new_lines.append(f"[hooks.state.'{posix_script}:{event_key}']\n")
+        new_lines.append(f"trusted_hash = \"{trusted_hash}\"\n")
 
     _write_lines(config_path, new_lines)
     logger.info("Codex config.toml updated (trusted_hash=%s)", trusted_hash[:20] + "...")
@@ -373,18 +369,18 @@ def _unregister_codex() -> None:
     """Remove cell_mem entries from Codex config."""
     codex = _codex_dir()
 
-    # 1. Remove from hooks.json
+    # 1. Remove from hooks.json (all event keys)
     hooks_json_path = codex / "hooks.json"
     if hooks_json_path.exists():
         hooks = _read_json(hooks_json_path)
-        hooks["post_tool_use"] = [
-            e
-            for e in hooks.get("post_tool_use", [])
-            if not any(
-                "cell_mem_session_hook" in str(arg)
-                for arg in (e.get("command", []))
-            )
-        ]
+        for event_key in ("session_start", "post_tool_use"):
+            hooks[event_key] = [
+                e for e in hooks.get(event_key, [])
+                if not any(
+                    "cell_mem_session_hook" in str(arg)
+                    for arg in (e.get("command", []))
+                )
+            ]
         _write_json(hooks_json_path, hooks)
         logger.info("Removed cell_mem entries from Codex hooks.json")
 
