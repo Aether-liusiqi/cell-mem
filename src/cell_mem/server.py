@@ -205,6 +205,19 @@ def main() -> None:
         llm_base_url=args.llm_base_url,
     )
 
+    # ------------------------------------------------------------------
+    # Start ingest endpoint FIRST — before model preload — so hook scripts
+    # can POST SessionStart events immediately. The ingest server does not
+    # depend on the embedding model (save sets embedding=NULL).
+    # ------------------------------------------------------------------
+    from cell_mem.hooks.ingest import IngestServer
+
+    ingest = IngestServer(ms, port=args.ingest_port)
+    if ingest.start():
+        logger.info("Ingest ready on http://127.0.0.1:%d/ingest", args.ingest_port)
+    else:
+        logger.debug("Ingest port %d unavailable", args.ingest_port)
+
     # Preload embedding model only when --preload flag is explicitly passed.
     # In stdio mode without --preload, model loads lazily on first tool call.
     # This prevents MCP handshake timeout from 27s cold-start model loading.
@@ -234,20 +247,6 @@ def main() -> None:
         logger.info("Hooks cleaned.")
         ms.shutdown()
         return
-
-    # ------------------------------------------------------------------
-    # Ingest endpoint — auto-starts on every server launch so hook scripts
-    # can always reach us, regardless of transport mode (stdio or HTTP).
-    # Port conflict is non-fatal: if another instance already has the port,
-    # we log a warning and continue without ingest.
-    # ------------------------------------------------------------------
-    from cell_mem.hooks.ingest import IngestServer
-
-    ingest = IngestServer(ms, port=args.ingest_port)
-    if ingest.start():
-        logger.info("Ingest ready on http://127.0.0.1:%d/ingest", args.ingest_port)
-    else:
-        logger.debug("Ingest port %d unavailable (another instance may be running)", args.ingest_port)
 
     # ------------------------------------------------------------------
     # FastMCP server
