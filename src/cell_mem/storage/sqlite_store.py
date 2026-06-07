@@ -310,7 +310,12 @@ class SqliteStore:
     # ------------------------------------------------------------------
 
     def get_connection(self) -> sqlite3.Connection:
-        """Return thread-local connection. Creates + configures on first access."""
+        """Return thread-local connection. Creates + configures on first access.
+
+        The sqlite_vec extension is loaded on **every** new connection because
+        extensions are per-connection, and FastMCP dispatches tool calls to
+        worker threads that each get their own SQLite connection.
+        """
         if not hasattr(self._local, "conn") or self._local.conn is None:
             conn = sqlite3.connect(self._db_path, check_same_thread=False)
             conn.execute("PRAGMA journal_mode=WAL;")
@@ -318,6 +323,17 @@ class SqliteStore:
             conn.execute("PRAGMA foreign_keys=ON;")
             conn.execute("PRAGMA busy_timeout=5000;")
             conn.row_factory = sqlite3.Row
+
+            # Load sqlite_vec on every new connection — extensions are
+            # per-connection and tool handlers run on different threads.
+            try:
+                import sqlite_vec
+                conn.enable_load_extension(True)
+                sqlite_vec.load(conn)
+                conn.enable_load_extension(False)
+            except Exception:
+                pass  # Non-fatal — vector search will use fallback
+
             self._local.conn = conn
             logger.debug("Created thread-local connection for %s", self._db_path)
         return self._local.conn
