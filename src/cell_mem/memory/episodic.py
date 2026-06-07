@@ -149,13 +149,22 @@ class EpisodicMemory:
         results = []
         seen: set = set()
         try:
-            ids = self._store.fetchall(
-                "SELECT rowid FROM episodic_fts WHERE episodic_fts MATCH ? LIMIT ?",
+            rows = self._store.fetchall(
+                "SELECT rowid FROM episodic_fts WHERE episodic_fts MATCH ? "
+                "ORDER BY rank LIMIT ?",
                 (query, limit),
             )
-            for row in ids:
-                ep = self.get(str(row["rowid"]))  # FTS rowid → id
-                if ep and ep.id not in seen:
+            for row in rows:
+                # FTS content-sync tables use episodic_memory.rowid, NOT id.
+                # Must join through rowid to get the actual UUID id.
+                ep_row = self._store.fetchone(
+                    f"SELECT * FROM {self._table} WHERE rowid = ?",
+                    (row["rowid"],),
+                )
+                if ep_row is None:
+                    continue
+                ep = MemoryObject.from_row(dict(ep_row))
+                if ep.id not in seen:
                     seen.add(ep.id)
                     results.append(ep)
         except Exception as exc:
