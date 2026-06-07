@@ -143,7 +143,10 @@ def _register_codex(ingest_port: int) -> bool:
 
     # Use POSIX paths — JSON backslash escaping corrupts Windows paths
     script_cmd = _posix_path(script_path)
-    hook_env = {"CELL_MEM_INGEST_PORT": str(ingest_port)}
+    hook_env = {
+        "CELL_MEM_INGEST_PORT": str(ingest_port),
+        "CELL_MEM_INGEST_FILE": _posix_path(Path.home() / ".cell_mem" / "ingest_queue.jsonl"),
+    }
     cell_mem_command = {"command": ["python", script_cmd], "env": hook_env}
 
     # SessionStart and PostToolUse are separate top-level event keys.
