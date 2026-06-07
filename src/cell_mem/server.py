@@ -15,6 +15,12 @@ Usage:
 
     # Preload embedding model (reduces first-request latency)
     python -m cell_mem.server --preload
+
+    # Register session recording hooks (Codex CLI / Claude Code)
+    python -m cell_mem.server --hooks install
+
+    # Remove hooks
+    python -m cell_mem.server --hooks clean
 """
 
 from __future__ import annotations
@@ -93,6 +99,45 @@ def parse_args() -> argparse.Namespace:
              "When set, clients must pass the key via the Authorization header. "
              "Strongly recommended for non-localhost deployments.",
     )
+    parser.add_argument(
+        "--llm-backend",
+        default="openai",
+        help="LLM backend (default: openai)",
+    )
+    parser.add_argument(
+        "--llm-api-key",
+        default=None,
+        help="LLM API key (falls back to CELL_MEM_LLM_API_KEY env)",
+    )
+    parser.add_argument(
+        "--llm-model",
+        default="gpt-4o-mini",
+        help="LLM model name (default: gpt-4o-mini)",
+    )
+    parser.add_argument(
+        "--llm-base-url",
+        default="https://api.openai.com/v1",
+        help="LLM API base URL (default: https://api.openai.com/v1)",
+    )
+    parser.add_argument(
+        "--hooks",
+        choices=["install", "clean"],
+        default=None,
+        help="Auto-register or remove session recording hooks "
+             "(installs hook scripts into Codex CLI / Claude Code config)",
+    )
+    parser.add_argument(
+        "--hooks-platform",
+        choices=["auto", "codex", "claude", "both"],
+        default="auto",
+        help="Target platform for --hooks (default: auto-detect)",
+    )
+    parser.add_argument(
+        "--ingest-port",
+        type=int,
+        default=8766,
+        help="Internal ingest endpoint port for hook scripts (default: 8766)",
+    )
     return parser.parse_args()
 
 
@@ -154,6 +199,10 @@ def main() -> None:
         seed_config_path=args.seed_config,
         vector_backend=args.vector_backend,
         api_key=args.api_key,
+        llm_backend=args.llm_backend,
+        llm_api_key=args.llm_api_key,
+        llm_model=args.llm_model,
+        llm_base_url=args.llm_base_url,
     )
 
     # Preload embedding model only when --preload flag is explicitly passed.
@@ -164,7 +213,30 @@ def main() -> None:
         ms.embed_model.ensure_loaded()
         logger.info("Embedding model ready (dim=%d)", ms.embed_model.DIM)
 
-    # Create FastMCP server
+    # ------------------------------------------------------------------
+    # Hook registration (--hooks install / --hooks clean)
+    # ------------------------------------------------------------------
+    from cell_mem.hooks.registrar import install as hooks_install, uninstall as hooks_uninstall
+    from cell_mem.hooks.ingest import IngestServer
+
+    if args.hooks == "install":
+        result = hooks_install(platform=args.hooks_platform, ingest_port=args.ingest_port)
+        logger.info("Hook install result: %s", result)
+        # Start internal ingest endpoint so hook scripts can reach us
+        IngestServer(ms, port=args.ingest_port).start()
+        logger.info(
+            "Tip: For best results, run cell-mem as a daemon before opening "
+            "your agent session:  cell-mem --http --preload &"
+        )
+    elif args.hooks == "clean":
+        result = hooks_uninstall(platform=args.hooks_platform)
+        logger.info("Hook clean result: %s", result)
+        logger.info("Hooks cleaned. Use --hooks install to re-register.")
+        ms.shutdown()
+        return
+
+    # ------------------------------------------------------------------
+    # FastMCP server
     from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP(

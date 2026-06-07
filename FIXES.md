@@ -1,6 +1,18 @@
 # Cell-mem 修复记录
 
-## 第 5 轮 — 2026-06-06 — Codex v3 测试报告
+> 每轮修复完成后必须执行：[死代码扫描 → __pycache__ 清理 → 测试验证 → FIXES.md 更新]
+
+## 第 6 轮 — 2026-06-07 — 自动会话记录 Hook 系统（新功能）
+
+| # | 问题 | 修复 | 文件 |
+|---|------|------|------|
+| 1 | cell-mem 无法自动记录会话内容 | 新增完整 hook 系统：IngestServer + session_hook.py + registrar.py | `hooks/` (新增) |
+| 2 | ingest.py save() 参数错误 | `ms.save()` 使用 `options` dict 传参而非 kwargs | `hooks/ingest.py` |
+| 3 | tags 重复添加 "hook" | ingest 端去重检查 | `hooks/ingest.py` |
+
+---
+
+## 第 5 轮 — 2026-06-06 — Codex v3 测试报告 — 2026-06-06 — Codex v3 测试报告
 
 | # | 问题 | 修复 | 文件 |
 |---|------|------|------|

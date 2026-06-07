@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.1] — 2026-06-07
+
+### Added
+- **Automatic Session Recording Hooks** (`hooks/`): Auto-register hook scripts into
+  Codex CLI and Claude Code configs via `--hooks install`. SessionStart and PostToolUse
+  events are captured by a standalone hook script (`session_hook.py`, zero cell_mem
+  dependencies) and asynchronously written to episodic memory via an internal HTTP
+  ingest endpoint (`ingest.py`, stdlib-only daemon server).
+- **Dual-Platform Registrar** (`hooks/registrar.py`): Idempotent merge-based registration
+  for both Codex (`hooks.json` + `config.toml`) and Claude Code (`settings.json`).
+  `--hooks clean` removes all traces without touching unrelated hook entries.
+- **`--hooks` / `--hooks-platform` / `--ingest-port`** CLI arguments on `server.py`.
+
+### Design
+- Session content is saved immediately (embedding=NULL, ~1ms) — no dependency on
+  embedding model startup. EmbeddingWorker backfills vectors asynchronously.
+- Hook script never blocks the agent — all failure paths silently exit 0.
+- Ingest endpoint binds 127.0.0.1 only (security: internal channel, never exposed).
+
+---
+
+## [0.2.0] — 2026-06-06
+
+### Added
+- **User Preference Closed-Loop System** (`consolidation/preference.py`): Five-stage
+  automatic pipeline — SignalDetector → Extractor → Processor → Injector → Feedback.
+  Preferences auto-extracted from episodic saves, conflict-resolved, context-triggered
+  on recall (max 3, ≤300 chars), and continuously refined via implicit feedback.
+- **5 Preference MCP Tools** (`tools/preference.py`): extract_preferences, get_preferences,
+  check_preference_conflicts, inject_preference, record_preference_feedback.
+- **Async Embedding Architecture** (`embedding/worker.py`): Background EmbeddingWorker
+  daemon thread decouples `memory_save` (instant, embedding=NULL) from embedding model
+  inference (batched, async). FTS5 fallback when vectors unavailable.
+- **ONNX Runtime Backend** (`embedding/onnx.py`): Zero-PyTorch embedding via ONNX Runtime
+  (~15MB) + tokenizers (~5MB). Auto backend selection: ONNX first, PyTorch fallback.
+  Same model weights, zero quality loss, ~8x faster load time.
+- **17 MCP Tools** (up from 12): +5 preference pipeline tools.
+
+### Fixed
+- 28+ bugs across 5 rounds of Codex testing (see [FIXES.md](FIXES.md))
+- Key fixes: thread-safe model loading, ONNX fallback state cleanup, FTS5 result
+  deduplication, associate ID validation, working_memory tags_json column, ChromaDB
+  empty metadata rejection, MCP handshake timeout (lazy preload).
+
+---
+
 ## [0.1.0] — 2026-06-04
 
 ### Phase 4 — Generative Replay & Full Reflection (feature-complete release)
@@ -79,4 +125,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.2.1]: https://github.com/Aether-liusiqi/cell-mem/releases/tag/v0.2.1
+[0.2.0]: https://github.com/Aether-liusiqi/cell-mem/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Aether-liusiqi/cell-mem/releases/tag/v0.1.0

@@ -18,7 +18,7 @@ MCP-compatible agent host.
 ```
 MCP Server (stdio + HTTP transport)
 │
-├── 12 MCP Tools
+├── 17 MCP Tools
 │   ├── memory_save            — Store a memory
 │   ├── memory_recall          — Cross-layer retrieval
 │   ├── memory_status          — System health dashboard
@@ -30,7 +30,17 @@ MCP Server (stdio + HTTP transport)
 │   ├── memory_replay          — Trigger generative replay (hypothesis creation)
 │   ├── memory_hypothesis_feedback — Confirm/reject a creative hypothesis
 │   ├── memory_creative_pool   — Inspect the hypothesis pool
-│   └── memory_check_environment  — Detect environment changes → auto-verify
+│   ├── memory_check_environment  — Detect environment changes → auto-verify
+│   ├── memory_extract_preferences    — Extract user preferences from episodes
+│   ├── memory_get_preferences        — List stored preferences
+│   ├── memory_check_preference_conflicts — Detect conflicting preferences
+│   ├── memory_inject_preference      — Manually inject a preference
+│   └── memory_record_preference_feedback — Record feedback on a preference
+│
+├── Automatic Session Recording (--hooks install)
+│   ├── Codex CLI & Claude Code hook registration
+│   ├── Standalone hook script (zero cell_mem deps, never blocks agent)
+│   └── Async ingest endpoint → episodic memory (embedding=NULL, worker backfills)
 │
 ├── Memory Layers (brain-inspired)
 │   ├── Working Memory    <minutes>  ~50 items, attention-based decay
@@ -127,6 +137,26 @@ Add to your agent's MCP configuration:
   }
 }
 ```
+
+### Automatic Session Recording (Hooks)
+
+Register cell-mem as a session recording hook so all agent interactions are
+automatically saved to episodic memory — no manual `memory_save` calls needed.
+
+```bash
+# Install hooks (auto-detects Codex CLI / Claude Code)
+python -m cell_mem.server --hooks install
+
+# For best results, run cell-mem as a daemon before opening your agent session:
+python -m cell_mem.server --http --preload &
+
+# Remove hooks
+python -m cell_mem.server --hooks clean
+```
+
+Session content is saved instantly (embedding=NULL, <1ms). The background
+EmbeddingWorker fills in vectors asynchronously — recording works from
+the very first second of your session, even before the embedding model loads.
 
 ---
 
