@@ -49,8 +49,13 @@ class IngestServer:
     def running(self) -> bool:
         return self._httpd is not None
 
-    def start(self) -> None:
-        """Start the ingest server in a daemon thread."""
+    def start(self) -> bool:
+        """Start the ingest server in a daemon thread.
+
+        Returns:
+            True if the server started successfully, False if the port was
+            already in use (another cell-mem instance is running).
+        """
         ms = self._ms  # capture for handler
 
         class _Handler(BaseHTTPRequestHandler):
@@ -116,7 +121,12 @@ class IngestServer:
                 self.end_headers()
                 self.wfile.write(payload)
 
-        self._httpd = HTTPServer(("127.0.0.1", self._port), _Handler)
+        try:
+            self._httpd = HTTPServer(("127.0.0.1", self._port), _Handler)
+        except OSError:
+            logger.debug("Ingest port %d unavailable (in use by another process)", self._port)
+            return False
+
         self._httpd.ingest_port = self._port
         self._httpd._ms = ms  # type: ignore[attr-defined]
 
@@ -124,6 +134,7 @@ class IngestServer:
         self._thread.start()
 
         logger.info("Ingest endpoint ready on http://127.0.0.1:%d/ingest", self._port)
+        return True
 
     def shutdown(self) -> None:
         """Shut down the ingest server."""

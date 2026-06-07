@@ -215,25 +215,39 @@ def main() -> None:
 
     # ------------------------------------------------------------------
     # Hook registration (--hooks install / --hooks clean)
+    # These are ONE-TIME setup operations — they only modify platform config
+    # files (hooks.json, settings.json), NEVER the MCP server launch args.
     # ------------------------------------------------------------------
     from cell_mem.hooks.registrar import install as hooks_install, uninstall as hooks_uninstall
-    from cell_mem.hooks.ingest import IngestServer
 
     if args.hooks == "install":
         result = hooks_install(platform=args.hooks_platform, ingest_port=args.ingest_port)
         logger.info("Hook install result: %s", result)
-        # Start internal ingest endpoint so hook scripts can reach us
-        IngestServer(ms, port=args.ingest_port).start()
         logger.info(
-            "Tip: For best results, run cell-mem as a daemon before opening "
-            "your agent session:  cell-mem --http --preload &"
+            "Hooks installed. Use --hooks clean to remove. "
+            "The ingest endpoint auto-starts on every server launch — "
+            "no extra flags needed in your MCP config."
         )
     elif args.hooks == "clean":
         result = hooks_uninstall(platform=args.hooks_platform)
         logger.info("Hook clean result: %s", result)
-        logger.info("Hooks cleaned. Use --hooks install to re-register.")
+        logger.info("Hooks cleaned.")
         ms.shutdown()
         return
+
+    # ------------------------------------------------------------------
+    # Ingest endpoint — auto-starts on every server launch so hook scripts
+    # can always reach us, regardless of transport mode (stdio or HTTP).
+    # Port conflict is non-fatal: if another instance already has the port,
+    # we log a warning and continue without ingest.
+    # ------------------------------------------------------------------
+    from cell_mem.hooks.ingest import IngestServer
+
+    ingest = IngestServer(ms, port=args.ingest_port)
+    if ingest.start():
+        logger.info("Ingest ready on http://127.0.0.1:%d/ingest", args.ingest_port)
+    else:
+        logger.debug("Ingest port %d unavailable (another instance may be running)", args.ingest_port)
 
     # ------------------------------------------------------------------
     # FastMCP server

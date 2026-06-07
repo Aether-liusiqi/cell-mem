@@ -32,6 +32,16 @@ _HOOK_SCRIPT_NAME = "cell_mem_session_hook.py"
 _HOOK_TEMPLATE = Path(__file__).resolve().parent / "session_hook.py"
 
 
+def _posix_path(p: Path) -> str:
+    """Convert a Windows path to POSIX-slash form for safe embedding in JSON.
+
+    JSON escape rules make Windows backslash paths unreliable:
+    ``C:\\Users\\...`` → ``\\U`` interpreted as unicode escape, path corrupted.
+    Windows Python accepts forward slashes natively, so we normalize to POSIX.
+    """
+    return str(p).replace("\\", "/")
+
+
 # ---------------------------------------------------------------------------
 # Platform detection
 # ---------------------------------------------------------------------------
@@ -132,15 +142,17 @@ def _register_codex(ingest_port: int) -> bool:
     hooks_json = _read_json(hooks_json_path)
 
     # Cell-mem hook entries (supported events)
+    # Use POSIX paths — JSON backslash escaping corrupts Windows paths
+    script_cmd = _posix_path(script_path)
     cell_mem_entries = [
         {
             "matcher": "SessionStart",
-            "command": ["python", str(script_path)],
+            "command": ["python", script_cmd],
             "env": {"CELL_MEM_INGEST_PORT": str(ingest_port)},
         },
         {
             "matcher": "PostToolUse",
-            "command": ["python", str(script_path)],
+            "command": ["python", script_cmd],
             "env": {"CELL_MEM_INGEST_PORT": str(ingest_port)},
         },
     ]
@@ -200,7 +212,7 @@ def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str
     # Add trusted_hash under [hooks.state]
     if "[hooks.state]" not in "".join(new_lines):
         new_lines.append("\n[hooks.state]\n")
-    new_lines.append(f'[hooks.state.\'{str(script_path)}\']\n')
+    new_lines.append(f"[hooks.state.'{_posix_path(script_path)}']\n")
     new_lines.append(f"trusted_hash = \"{trusted_hash}\"\n")
 
     _write_lines(config_path, new_lines)
@@ -233,7 +245,8 @@ def _register_claude(ingest_port: int) -> bool:
         settings["hooks"] = {}
 
     # Claude Code hook structure for SessionStart and PostToolUse
-    cell_mem_command = f"python {script_path}"
+    # Use POSIX paths — JSON backslash escaping corrupts Windows paths
+    cell_mem_command = f"python {_posix_path(script_path)}"
 
     for event in ("SessionStart", "PostToolUse"):
         if event not in settings["hooks"]:
