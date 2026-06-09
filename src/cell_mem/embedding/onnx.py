@@ -92,7 +92,8 @@ class ONNXEmbeddingModel:
         self.ensure_loaded()
         inputs = self._tokenize(text)
         outputs = self._session.run(None, inputs)
-        vec = outputs[0][0].astype(np.float32)
+        hidden = outputs[0][0]  # (seq_len, 384)
+        vec = hidden.mean(axis=0).astype(np.float32)  # mean pooling -> (384,)
         return vec / (np.linalg.norm(vec) + 1e-10)
 
     def embed_query(self, text: str) -> np.ndarray:
@@ -105,7 +106,8 @@ class ONNXEmbeddingModel:
         for i, text in enumerate(texts):
             inputs = self._tokenize(text)
             outputs = self._session.run(None, inputs)
-            vec = outputs[0][0].astype(np.float32)
+            hidden = outputs[0][0]  # (seq_len, 384)
+            vec = hidden.mean(axis=0).astype(np.float32)  # mean pooling -> (384,)
             vectors[i] = vec / (np.linalg.norm(vec) + 1e-10)
         return vectors
 
@@ -123,12 +125,10 @@ class ONNXEmbeddingModel:
         max_len = min(len(encoding.ids), 128)
         input_ids = encoding.ids[:max_len]
         attention_mask = [1] * max_len
-        token_type_ids = [0] * max_len
 
         return {
             "input_ids": np.array([input_ids], dtype=np.int64),
             "attention_mask": np.array([attention_mask], dtype=np.int64),
-            "token_type_ids": np.array([token_type_ids], dtype=np.int64),
         }
 
     def _load_tokenizer(self) -> None:

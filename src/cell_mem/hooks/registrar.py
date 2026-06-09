@@ -125,9 +125,12 @@ def _compute_hash(script_path: Path) -> str:
 def _register_codex(ingest_port: int) -> bool:
     """Register hooks in Codex CLI config.
 
-    Writes:
+    Writes hooks.json in the **official Codex v0.137.0+ format**:
+    ``{"hooks": {"SessionStart": [...], "PostToolUse": [...]}}``
+    with ``{"type": "command", "command": "<full python path> <script>"}`` entries.
+
+    Also writes:
     - ``~/.codex/hooks/cell_mem_session_hook.py``  (hook script)
-    - ``~/.codex/hooks.json``                       (hook entries, merged)
     - ``~/.codex/config.toml``                      (trust hash + hooks=true, merged)
     """
     codex = _codex_dir()
@@ -137,50 +140,96 @@ def _register_codex(ingest_port: int) -> bool:
     script_path = _install_hook_script(hooks_dir, ingest_port)
     trusted_hash = _compute_hash(script_path)
 
-    # 2. Update hooks.json
-    hooks_json_path = codex / "hooks.json"
-    hooks_json = _read_json(hooks_json_path)
-
-    # Use POSIX paths — JSON backslash escaping corrupts Windows paths
+    # 2. Write hooks.json in OFFICIAL format (v0.137.0+)
+    #    - Wrapped in {"hooks": {...}}
+    #    - PascalCase event names: SessionStart, PostToolUse
+    #    - Command as string with full Python path (bare "python" fails in sandbox)
+    #    - SessionStart requires matcher (startup|resume|clear|compact)
+    python_exe = _posix_path(Path(sys.executable))
     script_cmd = _posix_path(script_path)
-    hook_env = {
-        "CELL_MEM_INGEST_PORT": str(ingest_port),
-        "CELL_MEM_INGEST_FILE": _posix_path(Path.home() / ".cell_mem" / "ingest_queue.jsonl"),
-    }
-    cell_mem_command = {"command": ["python", script_cmd], "env": hook_env}
+    sessions_dir = _posix_path(codex / "sessions")
 
-    # SessionStart and PostToolUse are separate top-level event keys.
-    # "matcher" is only meaningful for PostToolUse (filters tool names).
-    # Remove any previous cell_mem entries from all event keys.
-    for event_key in ("session_start", "post_tool_use"):
-        existing = hooks_json.get(event_key, [])
-        existing = [
-            e for e in existing
-            if not any("cell_mem_session_hook" in str(arg) for arg in (e.get("command", [])))
-        ]
-        hooks_json[event_key] = existing
+    # Command: full python path (bare "python" fails in Codex subprocess).
+    # CELL_MEM_SESSIONS_DIR is set via shell env or the script's built-in defaults;
+    # if file write fails (sandbox), the script falls back to HTTP POST.
+    full_command = f"{python_exe} {script_cmd}"
 
-    # SessionStart: no matcher needed (event-level hook)
-    hooks_json.setdefault("session_start", []).append(cell_mem_command)
+    # Preserve any non-cell-mem hooks that may exist in the old format
+    hooks_json_path = codex / "hooks.json"
+    existing = _read_json(hooks_json_path)
 
-    # PostToolUse: matcher="" means all tools
-    hooks_json.setdefault("post_tool_use", []).append(
-        {**cell_mem_command, "matcher": ""}
-    )
+    # Build new hooks.json — always start fresh for the "hooks" key
+    # to avoid format conflicts (old snake_case keys vs new wrapped format)
+    new_hooks: dict = {"hooks": {}}
 
-    _write_json(hooks_json_path, hooks_json)
-    logger.info("Codex hooks.json updated (session_start + post_tool_use)")
+    # Merge any existing hooks that aren't cell_mem
+    if "hooks" in existing and isinstance(existing["hooks"], dict):
+        for event_name, entries in existing["hooks"].items():
+            if event_name in ("SessionStart", "PostToolUse"):
+                # Filter out cell_mem entries
+                filtered = [
+                    e for e in entries
+                    if not _is_cell_mem_entry(e)
+                ]
+                if filtered:
+                    new_hooks["hooks"][event_name] = filtered
+            else:
+                new_hooks["hooks"][event_name] = entries
 
-    # 3. Update config.toml
+    # Add cell_mem SessionStart hook
+    new_hooks["hooks"].setdefault("SessionStart", []).append({
+        "matcher": "startup|resume",
+        "hooks": [
+            {
+                "type": "command",
+                "command": full_command,
+            }
+        ],
+    })
+
+    # Add cell_mem PostToolUse hook (matcher="" catches all tool uses)
+    new_hooks["hooks"].setdefault("PostToolUse", []).append({
+        "matcher": "",
+        "hooks": [
+            {
+                "type": "command",
+                "command": full_command,
+            }
+        ],
+    })
+
+    _write_json(hooks_json_path, new_hooks)
+    logger.info("Codex hooks.json written (official format, python=%s)", python_exe)
+
+    # 3. Update config.toml — ensure hooks=true, clean old trust states, add new
     config_toml_path = codex / "config.toml"
     _update_codex_config(config_toml_path, script_path, trusted_hash)
 
-    logger.info("Codex hooks registered successfully")
+    logger.info("Codex hooks registered successfully (sessions_dir=%s)", sessions_dir)
     return True
 
 
+def _is_cell_mem_entry(entry: dict) -> bool:
+    """Check if a hooks.json entry belongs to cell_mem."""
+    hooks_list = entry.get("hooks", [])
+    for h in hooks_list:
+        cmd = h.get("command", "")
+        if "cell_mem_session_hook" in str(cmd):
+            return True
+    # Also check old-format command array
+    cmd_arr = entry.get("command", [])
+    if any("cell_mem_session_hook" in str(arg) for arg in cmd_arr):
+        return True
+    return False
+
+
 def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str) -> None:
-    """Ensure hooks=true and set trusted_hash in Codex config.toml."""
+    """Ensure hooks=true and set trusted_hash in Codex config.toml.
+
+    Cleans ALL old cell_mem trust state entries (both script-level
+    and hooks.json-level) before writing new ones, preventing format
+    conflicts from stale entries.
+    """
     if not config_path.exists():
         logger.warning("Codex config.toml not found at %s", config_path)
         return
@@ -189,7 +238,7 @@ def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str
     new_lines: List[str] = []
     hooks_enabled = False
     posix_script = _posix_path(script_path)
-    skip_block = False  # True while inside a cell_mem [hooks.state] block
+    skip_block = False
 
     for line in lines:
         stripped = line.strip()
@@ -199,17 +248,24 @@ def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str
             hooks_enabled = True
             continue
 
-        # Detect start of a cell_mem [hooks.state] block — skip it entirely
-        if stripped.startswith("[hooks.state") and "cell_mem_session_hook" in stripped:
+        # Remove CELL_MEM_INGEST_FILE env var (replaced by CELL_MEM_SESSIONS_DIR)
+        if "CELL_MEM_INGEST_FILE" in stripped:
+            continue
+
+        # Skip ANY [hooks.state] block that references cell_mem
+        # (old script-level, old hooks.json-level, or any future format)
+        if stripped.startswith("[hooks.state") and (
+            "cell_mem_session_hook" in stripped
+            or ("hooks.json" in stripped and "post_tool_use" in stripped.lower())
+            or ("hooks.json" in stripped and "session_start" in stripped.lower())
+        ):
             skip_block = True
             continue
 
-        # Skip trusted_hash line inside a cell_mem block, then end skip
         if skip_block and stripped.startswith("trusted_hash"):
             skip_block = False
             continue
 
-        # End of block (empty line or next section after cell_mem block)
         if skip_block and (stripped == "" or stripped.startswith("[")):
             skip_block = False
 
@@ -222,9 +278,9 @@ def _update_codex_config(config_path: Path, script_path: Path, trusted_hash: str
     if not hooks_enabled:
         new_lines.append("\nhooks = true\n")
 
-    # Append trusted_hash entries for both session_start and post_tool_use
+    # Append trusted_hash entries (script-level trust for both events)
     new_lines.append("\n")
-    for event_idx, event_key in enumerate(("session_start", "post_tool_use")):
+    for event_key in ("session_start", "post_tool_use"):
         new_lines.append(f"[hooks.state.'{posix_script}:{event_key}']\n")
         new_lines.append(f"trusted_hash = \"{trusted_hash}\"\n")
 
@@ -372,22 +428,38 @@ def _unregister_codex() -> None:
     """Remove cell_mem entries from Codex config."""
     codex = _codex_dir()
 
-    # 1. Remove from hooks.json (all event keys)
+    # 1. Remove from hooks.json (handles both old snake_case and new wrapped format)
     hooks_json_path = codex / "hooks.json"
     if hooks_json_path.exists():
         hooks = _read_json(hooks_json_path)
-        for event_key in ("session_start", "post_tool_use"):
-            hooks[event_key] = [
-                e for e in hooks.get(event_key, [])
-                if not any(
-                    "cell_mem_session_hook" in str(arg)
-                    for arg in (e.get("command", []))
-                )
-            ]
+
+        # New format: {"hooks": {"SessionStart": [...], "PostToolUse": [...]}}
+        if "hooks" in hooks and isinstance(hooks["hooks"], dict):
+            for event_key in ("SessionStart", "PostToolUse"):
+                entries = hooks["hooks"].get(event_key, [])
+                hooks["hooks"][event_key] = [
+                    e for e in entries if not _is_cell_mem_entry(e)
+                ]
+            # Remove empty event keys
+            hooks["hooks"] = {
+                k: v for k, v in hooks["hooks"].items() if v
+            }
+
+        # Old format: {"session_start": [...], "post_tool_use": [...]}
+        for old_key in ("session_start", "post_tool_use"):
+            if old_key in hooks:
+                hooks[old_key] = [
+                    e for e in hooks[old_key]
+                    if not any(
+                        "cell_mem_session_hook" in str(arg)
+                        for arg in (e.get("command", []))
+                    )
+                ]
+
         _write_json(hooks_json_path, hooks)
         logger.info("Removed cell_mem entries from Codex hooks.json")
 
-    # 2. Remove from config.toml [hooks.state]
+    # 2. Remove from config.toml [hooks.state] — all cell_mem + hooks.json entries
     config_path = codex / "config.toml"
     if config_path.exists():
         lines = _read_lines(config_path)
@@ -395,7 +467,11 @@ def _unregister_codex() -> None:
         skip_next = False
         for line in lines:
             stripped = line.strip()
-            if "cell_mem_session_hook" in stripped:
+            # Match any cell_mem hook state entry (script-level or hooks.json-level)
+            if ("cell_mem_session_hook" in stripped
+                or ("hooks.json" in stripped and "cell_mem" not in stripped
+                    and ("post_tool_use" in stripped.lower()
+                         or "session_start" in stripped.lower()))):
                 skip_next = True
                 continue
             if skip_next and stripped.startswith("trusted_hash"):

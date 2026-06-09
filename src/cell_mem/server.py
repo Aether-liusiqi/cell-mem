@@ -193,7 +193,17 @@ def main() -> None:
             "Set --api-key to enable shared-secret authentication."
         )
 
-    # Initialize MemorySystem
+    # ------------------------------------------------------------------
+    # 1. SessionRecorder — zero-dependency JSONL session file manager.
+    #    Created FIRST so ingest can accept events before MemorySystem is ready.
+    # ------------------------------------------------------------------
+    from cell_mem.session.recorder import SessionRecorder
+
+    recorder = SessionRecorder()
+
+    # ------------------------------------------------------------------
+    # 2. Initialize MemorySystem
+    # ------------------------------------------------------------------
     ms = MemorySystem(
         db_path=db_path,
         seed_config_path=args.seed_config,
@@ -206,13 +216,12 @@ def main() -> None:
     )
 
     # ------------------------------------------------------------------
-    # Start ingest endpoint FIRST — before model preload — so hook scripts
-    # can POST SessionStart events immediately. The ingest server does not
-    # depend on the embedding model (save sets embedding=NULL).
+    # 3. Start ingest endpoint — hook scripts POST here; events are
+    #    written to session JSONL via SessionRecorder (no queue file).
     # ------------------------------------------------------------------
     from cell_mem.hooks.ingest import IngestServer
 
-    ingest = IngestServer(ms, port=args.ingest_port)
+    ingest = IngestServer(recorder, port=args.ingest_port)
     if ingest.start():
         logger.info("Ingest ready on http://127.0.0.1:%d/ingest", args.ingest_port)
     else:
@@ -227,9 +236,18 @@ def main() -> None:
         logger.info("Embedding model ready (dim=%d)", ms.embed_model.DIM)
 
     # ------------------------------------------------------------------
-    # Hook registration (--hooks install / --hooks clean)
-    # These are ONE-TIME setup operations — they only modify platform config
-    # files (hooks.json, settings.json), NEVER the MCP server launch args.
+    # 4. Start SessionProcessor — background daemon that bridges
+    #    session JSONL → chunk → episodic memory (async, non-blocking).
+    # ------------------------------------------------------------------
+    from cell_mem.session.processor import SessionProcessor
+
+    processor = SessionProcessor(ms, recorder.sessions_dir)
+    processor.start()
+    logger.info("SessionProcessor started (sessions_dir=%s)", recorder.sessions_dir)
+
+    # ------------------------------------------------------------------
+    # 5. Hook registration (--hooks install / --hooks clean)
+    #    ONE-TIME setup — modifies platform config files, never MCP args.
     # ------------------------------------------------------------------
     from cell_mem.hooks.registrar import install as hooks_install, uninstall as hooks_uninstall
 
@@ -238,18 +256,21 @@ def main() -> None:
         logger.info("Hook install result: %s", result)
         logger.info(
             "Hooks installed. Use --hooks clean to remove. "
-            "The ingest endpoint auto-starts on every server launch — "
-            "no extra flags needed in your MCP config."
+            "Session recording writes to: %s",
+            recorder.sessions_dir,
         )
     elif args.hooks == "clean":
         result = hooks_uninstall(platform=args.hooks_platform)
         logger.info("Hook clean result: %s", result)
         logger.info("Hooks cleaned.")
+        processor.stop()
+        recorder.close()
         ms.shutdown()
         return
 
     # ------------------------------------------------------------------
-    # FastMCP server
+    # 6. FastMCP server
+    # ------------------------------------------------------------------
     from mcp.server.fastmcp import FastMCP
 
     mcp = FastMCP(
@@ -283,6 +304,8 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("Received interrupt, shutting down...")
     finally:
+        processor.stop()
+        recorder.close()
         ms.shutdown()
         logger.info("Cell-mem Server stopped")
 
